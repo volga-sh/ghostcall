@@ -1,0 +1,18 @@
+{
+  "name": "evm-zcall",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:contracts": "forge build",
+    "test": "npm run build:contracts && node --disable-warning=ExperimentalWarning --experimental-strip-types --test test/zcall.test.ts",
+    "test:watch": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test --watch test/zcall.test.ts",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "ox": "0.9.6"
+  },
+  "devDependencies": {
+    "@types/node": "24.3.1",
+    "typescript": "5.9.2"
+  }
+}

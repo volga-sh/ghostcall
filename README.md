@@ -20,6 +20,17 @@ The implementation lives in [`src/ZCall.yul`](/Users/mmv/Projects/Personal/evm-z
 The original low-level feasibility checks are still preserved in
 [`scripts/poc.sh`](/Users/mmv/Projects/Personal/evm-zcall/scripts/poc.sh).
 
+## Development stack
+
+The repository now uses a minimal TypeScript-based test stack:
+
+- Foundry for contract compilation and `anvil`
+- Node's built-in [`node:test`](https://nodejs.org/api/test.html) runner
+- Node's built-in TypeScript stripping for test execution
+- [`ox`](https://www.npmjs.com/package/ox) for JSON-RPC, ABI, hex, and byte utilities
+
+That keeps the dependency footprint small while giving us a stable place to grow ABI-heavy tests.
+
 ## Current scope
 
 This implementation is intentionally focused on the cleanest read-only variant:
@@ -98,31 +109,41 @@ Observed against local `anvil`:
 Those limits apply directly here because the returned batch result is interpreted as would-be
 runtime code.
 
-## Build
+## Install
 
 ```bash
-forge build
+npm install
 ```
 
-The compiled initcode is emitted into the standard Foundry artifact tree. The integration script
-reads it from [`out/ZCall.yul/ZCall.json`](/Users/mmv/Projects/Personal/evm-zcall/out/ZCall.yul/ZCall.json).
-
-## Integration check
-
-1. Start `anvil` on `http://127.0.0.1:8545`.
-2. Run:
+## Build contracts
 
 ```bash
-./scripts/test_zcall.sh
+npm run build:contracts
 ```
 
-The integration script:
+The compiled artifacts are emitted into the standard Foundry artifact tree under `out/`.
 
-- compiles the Yul source,
-- deploys a tiny contract that returns `0x11223344`,
-- deploys a tiny contract that always reverts,
+## Test
+
+```bash
+npm test
+```
+
+The test suite:
+
+- compiles the contracts with Foundry,
+- starts an ephemeral `anvil` instance automatically,
+- deploys Solidity fixture contracts from Foundry artifacts,
+- encodes function calldata with `ox`,
 - executes a CREATE-style `eth_call` against ZCall,
+- decodes both function return data and revert data with `ox`,
 - verifies the success path, allowed-failure path, and revert path.
+
+For static TypeScript checking:
+
+```bash
+npm run typecheck
+```
 
 ## Design notes
 
