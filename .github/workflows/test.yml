@@ -1,11 +1,40 @@
-name: Tests
+name: SDK
 
 on:
   push:
   pull_request:
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Build SDK
+        run: npm run build:sdk
+
+      - name: Verify generated initcode is in sync
+        run: npm run check:sdk:initcode
+
   test:
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: read
