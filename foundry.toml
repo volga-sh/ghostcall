@@ -1,0 +1,11 @@
+[profile.default]
+src = "src"
+out = "out"
+optimizer = true
+optimizer_runs = 1
+bytecode_hash = "none"
+cbor_metadata = false
+evm_version = "prague"
+
+[lint]
+lint_on_build = false
