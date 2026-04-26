@@ -149,6 +149,7 @@ export function parseBenchmarkArgs(
 	const parseNumber = (name: string, raw: string): number => {
 		const parsed = Number(raw);
 		if (
+			raw.trim() === "" ||
 			!Number.isFinite(parsed) ||
 			!Number.isSafeInteger(parsed) ||
 			parsed < 0

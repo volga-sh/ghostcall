@@ -141,6 +141,20 @@ test("benchmark limit helpers", async (t) => {
 				),
 			/--max-calls must be a non-negative safe integer/,
 		);
+		assert.throws(
+			() =>
+				parseBenchmarkArgs(
+					[
+						"--rpc-url",
+						"https://example.invalid/rpc",
+						"--mode",
+						"raw",
+						"--timeout-ms",
+					],
+					{},
+				),
+			/--timeout-ms must be a non-negative safe integer/,
+		);
 	});
 
 	await t.test("encodes ERC-20 balanceOf calldata", () => {
