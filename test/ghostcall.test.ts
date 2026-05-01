@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Abi, AbiError, AbiFunction, Hex } from "ox";
-import { decodeResults, encodeCalls } from "../src/sdk/index.ts";
+import { aggregateCalls, encodeCalls } from "../src/sdk/index.ts";
 
 import {
 	deployContract,
-	ethCallCreate,
 	ethCallCreateRaw,
 	startAnvil,
 	stopAnvil,
@@ -93,16 +92,11 @@ test("Ghostcall integration", async (t) => {
 				[failCall, "mocked revert"],
 			);
 
-			const result = await ethCallCreate(
-				anvil.transport,
-				encodeCalls([
-					{ to: mockAddress, data: getValueCall },
-					{ to: mockAddress, data: getGreetingCall },
-					{ to: mockAddress, data: failCall },
-				]),
-			);
-
-			const entries = decodeResults(result);
+			const entries = await aggregateCalls(anvil.transport, [
+				{ to: mockAddress, data: getValueCall },
+				{ to: mockAddress, data: getGreetingCall },
+				{ to: mockAddress, data: failCall, allowFailure: true },
+			]);
 			const [valueEntry, greetingEntry, failureEntry] = entries;
 
 			assert.equal(entries.length, 3);
@@ -153,16 +147,11 @@ test("Ghostcall integration", async (t) => {
 				[echoEightCall, encodeFunctionResult(echoUint, 800n)],
 			);
 
-			const result = await ethCallCreate(
-				anvil.transport,
-				encodeCalls([
-					{ to: mockAddress, data: echoSevenCall },
-					{ to: mockAddress, data: echoEightCall },
-					{ to: mockAddress, data: echoNineCall },
-				]),
-			);
-
-			const entries = decodeResults(result);
+			const entries = await aggregateCalls(anvil.transport, [
+				{ to: mockAddress, data: echoSevenCall },
+				{ to: mockAddress, data: echoEightCall },
+				{ to: mockAddress, data: echoNineCall },
+			]);
 			const [firstEntry, secondEntry, thirdEntry] = entries;
 
 			assert.equal(entries.length, 3);
@@ -197,15 +186,18 @@ test("Ghostcall integration", async (t) => {
 			[getValueCall, encodeFunctionResult(getValue, 0x55n)],
 		);
 
-		const result = await ethCallCreate(
-			anvil.transport,
-			encodeCalls([
+		await assert.rejects(
+			aggregateCalls(anvil.transport, [
 				{ to: mockAddress, data: failCall },
 				{ to: mockAddress, data: getValueCall },
 			]),
+			/Ghostcall subcall 0 failed/,
 		);
 
-		const entries = decodeResults(result);
+		const entries = await aggregateCalls(anvil.transport, [
+			{ to: mockAddress, data: failCall, allowFailure: true },
+			{ to: mockAddress, data: getValueCall },
+		]);
 		const [failureEntry, successEntry] = entries;
 
 		assert.equal(entries.length, 2);
@@ -227,9 +219,9 @@ test("Ghostcall integration", async (t) => {
 		);
 	});
 
-	await t.test("returns empty bytes for an empty batch", async () => {
-		const result = await ethCallCreate(anvil.transport, encodeCalls([]));
-		assert.equal(result, "0x");
+	await t.test("returns an empty result list for an empty batch", async () => {
+		const entries = await aggregateCalls(anvil.transport, []);
+		assert.deepEqual(entries, []);
 	});
 
 	await t.test("returns data up to the CREATE return-size limit", async () => {
@@ -246,11 +238,9 @@ test("Ghostcall integration", async (t) => {
 			[largeCall, maxSizedResponse],
 		);
 
-		const result = await ethCallCreate(
-			anvil.transport,
-			encodeCalls([{ to: mockAddress, data: largeCall }]),
-		);
-		const [entry] = decodeResults(result);
+		const [entry] = await aggregateCalls(anvil.transport, [
+			{ to: mockAddress, data: largeCall },
+		]);
 
 		assert.ok(entry);
 		assert.equal(entry.success, true);
@@ -296,19 +286,17 @@ test("Ghostcall can return aggregate responses above the old in-contract cap", a
 	);
 
 	const callCount = Math.floor(0x6000 / (2 + 32)) + 1;
-	const result = await ethCallCreate(
+	const entries = await aggregateCalls(
 		anvil.transport,
-		encodeCalls(
-			Array.from({ length: callCount }, () => ({
-				to: mockAddress,
-				data: balanceCall,
-			})),
-		),
+		Array.from({ length: callCount }, () => ({
+			to: mockAddress,
+			data: balanceCall,
+		})),
 	);
 
-	assert.ok(byteLength(result) > 0x6000);
-
-	const entries = decodeResults(result);
+	assert.ok(
+		callCount * (encodedResultHeaderSize + byteLength(balanceResult)) > 0x6000,
+	);
 	assert.equal(entries.length, callCount);
 
 	for (const entry of entries) {

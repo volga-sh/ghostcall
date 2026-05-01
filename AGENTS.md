@@ -112,6 +112,7 @@ Tests in this repository are real execution tests, not abstract unit exercises.
 - Use strict typing and avoid `any`.
 - Prefer `type` aliases unless an `interface` is clearly better.
 - Exported functions should have explicit return types.
+- Keep exports grouped at the end of hand-written TypeScript files instead of scattering `export` keywords through declarations. Generated files may follow their generator's output shape.
 - Use runtime validation at string and wire boundaries, where TypeScript cannot protect callers.
 - Avoid unnecessary assertions and wrappers; use them only when narrowing external input or bridging third-party type limitations.
 

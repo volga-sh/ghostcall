@@ -13,7 +13,7 @@ import {
 
 const projectRoot = process.cwd();
 
-export type Artifact = {
+type Artifact = {
 	abi?: Abi.Abi;
 	bytecode?: {
 		object?: string;
@@ -22,20 +22,17 @@ export type Artifact = {
 
 type AnyFunction = ReturnType<typeof AbiFunction.from>;
 
-export async function loadArtifact(relativePath: string): Promise<Artifact> {
+async function loadArtifact(relativePath: string): Promise<Artifact> {
 	const filePath = join(projectRoot, relativePath);
 	return JSON.parse(await readFile(filePath, "utf8")) as Artifact;
 }
 
-export function readAbi(artifact: Artifact, artifactPath: string): Abi.Abi {
+function readAbi(artifact: Artifact, artifactPath: string): Abi.Abi {
 	assert.ok(artifact.abi, `Missing ABI in ${artifactPath}`);
 	return artifact.abi;
 }
 
-export function readBytecode(
-	artifact: Artifact,
-	artifactPath: string,
-): Hex.Hex {
+function readBytecode(artifact: Artifact, artifactPath: string): Hex.Hex {
 	const bytecode = artifact.bytecode?.object;
 	assert.ok(
 		bytecode && bytecode !== "0x",
@@ -44,7 +41,7 @@ export function readBytecode(
 	return normalizeHex(bytecode);
 }
 
-export async function sendFunctionTransaction(
+async function sendFunctionTransaction(
 	transport: Transport,
 	to: Hex.Hex,
 	abiFunction: AnyFunction,
@@ -56,7 +53,7 @@ export async function sendFunctionTransaction(
 	});
 }
 
-export function getRpcError(response: RawRpcResponse<Hex.Hex>): RpcErrorObject {
+function getRpcError(response: RawRpcResponse<Hex.Hex>): RpcErrorObject {
 	if ("error" in response) {
 		return response.error;
 	}
@@ -64,7 +61,7 @@ export function getRpcError(response: RawRpcResponse<Hex.Hex>): RpcErrorObject {
 	assert.fail(`Expected RPC error, received result ${response.result}`);
 }
 
-export function getRevertData(error: RpcErrorObject): Hex.Hex {
+function getRevertData(error: RpcErrorObject): Hex.Hex {
 	const { data } = error;
 	if (typeof data !== "string") {
 		throw new Error(`Expected string revert data, received ${typeof data}`);
@@ -73,21 +70,21 @@ export function getRevertData(error: RpcErrorObject): Hex.Hex {
 	return normalizeHex(data);
 }
 
-export function encodeFunctionData(
+function encodeFunctionData(
 	abiFunction: AnyFunction,
 	args: readonly unknown[],
 ): Hex.Hex {
 	return AbiFunction.encodeData(abiFunction as never, args as never);
 }
 
-export function encodeFunctionResult(
+function encodeFunctionResult(
 	abiFunction: AnyFunction,
 	output: unknown,
 ): Hex.Hex {
 	return AbiFunction.encodeResult(abiFunction as never, output as never);
 }
 
-export function decodeFunctionResult(
+function decodeFunctionResult(
 	abiFunction: AnyFunction,
 	result: Hex.Hex,
 ): unknown {
@@ -97,3 +94,16 @@ export function decodeFunctionResult(
 function normalizeHex(value: string): Hex.Hex {
 	return (value.startsWith("0x") ? value : `0x${value}`) as Hex.Hex;
 }
+
+export type { Artifact };
+export {
+	decodeFunctionResult,
+	encodeFunctionData,
+	encodeFunctionResult,
+	getRevertData,
+	getRpcError,
+	loadArtifact,
+	readAbi,
+	readBytecode,
+	sendFunctionTransaction,
+};

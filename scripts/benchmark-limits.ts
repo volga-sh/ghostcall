@@ -8,7 +8,7 @@ import {
 	type Hex,
 } from "../src/sdk/index.ts";
 
-export type BenchmarkMode = "raw" | "balances" | "all";
+type BenchmarkMode = "raw" | "balances" | "all";
 
 /**
  * Runtime configuration for the limit benchmark.
@@ -18,7 +18,7 @@ export type BenchmarkMode = "raw" | "balances" | "all";
  * the CLI flags one-to-one instead of hiding protocol choices behind another
  * abstraction. Each size cap is a search ceiling, not a claimed chain limit.
  */
-export type BenchmarkConfig = {
+type BenchmarkConfig = {
 	rpcUrl: string;
 	mode: BenchmarkMode;
 	tokens: readonly Hex[];
@@ -33,7 +33,7 @@ export type BenchmarkConfig = {
 	json: boolean;
 };
 
-export type LimitResult = {
+type LimitResult = {
 	maxPass: number;
 	firstFail: number | null;
 	exhaustedConfiguredMax: boolean;
@@ -42,7 +42,7 @@ export type LimitResult = {
 	failure: string | null;
 };
 
-export type BenchmarkReport = {
+type BenchmarkReport = {
 	chainId: Hex;
 	latestBlock: Hex;
 	blockTag: string;
@@ -65,7 +65,7 @@ export type BenchmarkReport = {
 		| null;
 };
 
-export type ParsedBenchmarkArgs =
+type ParsedBenchmarkArgs =
 	| {
 			help: true;
 	  }
@@ -80,8 +80,8 @@ const emptyRuntimeInitcode = "60006000f3";
 const emptyRuntimeInitcodeBytes = emptyRuntimeInitcode.length / 2;
 const prettyInteger = new Intl.NumberFormat("en-US");
 
-export const balanceInputBytesPerCall = 20 + 2 + 36;
-export const balanceReturnedBytesPerCall = 2 + 32;
+const balanceInputBytesPerCall = 20 + 2 + 36;
+const balanceReturnedBytesPerCall = 2 + 32;
 
 let nextRpcId = 1;
 
@@ -106,7 +106,7 @@ let nextRpcId = 1;
  *   "--mode", "raw",
  * ]);
  */
-export function parseBenchmarkArgs(
+function parseBenchmarkArgs(
 	argv: readonly string[],
 	env: Record<string, string | undefined> = process.env,
 ): ParsedBenchmarkArgs {
@@ -225,7 +225,7 @@ export function parseBenchmarkArgs(
  * @param owner - Address whose token balance will be queried.
  * @returns Raw calldata for `balanceOf(address)`.
  */
-export function encodeBalanceOfCalldata(owner: Hex): Hex {
+function encodeBalanceOfCalldata(owner: Hex): Hex {
 	return `0x${balanceOfSelector}${owner.slice(2).padStart(64, "0")}`;
 }
 
@@ -242,7 +242,7 @@ export function encodeBalanceOfCalldata(owner: Hex): Hex {
  * @param owners - Owner addresses to cycle through.
  * @returns Ordered ghostcall entries ready for `encodeCalls`.
  */
-export function buildBalanceCalls(
+function buildBalanceCalls(
 	count: number,
 	tokens: readonly Hex[],
 	owners: readonly Hex[],
@@ -271,7 +271,7 @@ export function buildBalanceCalls(
  * @param sizeBytes - Desired full initcode byte length.
  * @returns Initcode whose total length is exactly `sizeBytes`.
  */
-export function createRawInitcodeSizeProbe(sizeBytes: number): Hex {
+function createRawInitcodeSizeProbe(sizeBytes: number): Hex {
 	if (
 		!Number.isSafeInteger(sizeBytes) ||
 		sizeBytes < emptyRuntimeInitcodeBytes
@@ -295,7 +295,7 @@ export function createRawInitcodeSizeProbe(sizeBytes: number): Hex {
  * @param sizeBytes - Number of bytes the initcode should return.
  * @returns Initcode that should produce exactly `sizeBytes` returned bytes.
  */
-export function createRawRuntimeReturnProbe(sizeBytes: number): Hex {
+function createRawRuntimeReturnProbe(sizeBytes: number): Hex {
 	const size = sizeBytes.toString(16).padStart(2, "0");
 	const evenSize = size.length % 2 === 0 ? size : `0${size}`;
 	const pushOpcode = (0x5f + evenSize.length / 2).toString(16);
@@ -316,7 +316,7 @@ export function createRawRuntimeReturnProbe(sizeBytes: number): Hex {
  * @param probe - Candidate check.
  * @returns The largest passing value, first failing value if found, and attempt count.
  */
-export async function findLimit(
+async function findLimit(
 	min: number,
 	max: number,
 	probe: (candidate: number) => Promise<string | null>,
@@ -400,9 +400,7 @@ export async function findLimit(
  * @param config - Benchmark configuration from CLI flags or tests.
  * @returns Machine-readable benchmark report.
  */
-export async function runBenchmark(
-	config: BenchmarkConfig,
-): Promise<BenchmarkReport> {
+async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
 	const chainId = await rpc(config, "eth_chainId", []);
 	const latestBlock = await rpc(config, "eth_blockNumber", []);
 	const ghostcallInitcodeBytes = bytes(encodeCalls([]));
@@ -499,7 +497,7 @@ export async function runBenchmark(
  * @param report - Report returned by `runBenchmark`.
  * @returns Multi-line text without the RPC URL, so provider keys are not printed.
  */
-export function formatBenchmarkReport(report: BenchmarkReport): string {
+function formatBenchmarkReport(report: BenchmarkReport): string {
 	const lines = [
 		"ghostcall limit benchmark",
 		`chain id: ${report.chainId}`,
@@ -544,7 +542,7 @@ export function formatBenchmarkReport(report: BenchmarkReport): string {
 	return lines.join("\n");
 }
 
-export function formatUsage(): string {
+function formatUsage(): string {
 	return [
 		"Usage:",
 		"  npm run benchmark:limits -- --rpc-url <url> --mode raw",
@@ -728,3 +726,24 @@ if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
 		process.exitCode = 1;
 	});
 }
+
+export type {
+	BenchmarkConfig,
+	BenchmarkMode,
+	BenchmarkReport,
+	LimitResult,
+	ParsedBenchmarkArgs,
+};
+export {
+	balanceInputBytesPerCall,
+	balanceReturnedBytesPerCall,
+	buildBalanceCalls,
+	createRawInitcodeSizeProbe,
+	createRawRuntimeReturnProbe,
+	encodeBalanceOfCalldata,
+	findLimit,
+	formatBenchmarkReport,
+	formatUsage,
+	parseBenchmarkArgs,
+	runBenchmark,
+};

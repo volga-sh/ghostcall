@@ -3,15 +3,15 @@ import { ghostcallInitcode } from "./generated/initcode.ts";
 /**
  * Hex-encoded binary data prefixed with `0x`.
  *
- * This SDK operates exclusively on raw hex strings and does not accept byte arrays,
- * provider objects, or ABI fragments.
+ * Ghostcall request and response data is represented as raw hex strings. The
+ * SDK does not accept byte arrays or ABI fragments.
  */
-export type Hex = `0x${string}`;
+type Hex = `0x${string}`;
 
 /**
  * One Ghostcall subcall entry.
  */
-export type GhostcallCall = {
+type GhostcallCall = {
 	/**
 	 * Target contract address to invoke.
 	 */
@@ -27,9 +27,25 @@ export type GhostcallCall = {
 };
 
 /**
+ * One Ghostcall aggregate subcall entry.
+ *
+ * The wire format does not include failure-policy bits. `allowFailure` is an SDK
+ * policy applied after Ghostcall returns the packed result entries.
+ */
+type GhostcallAggregateCall = GhostcallCall & {
+	/**
+	 * Allows this subcall to return a failed result entry.
+	 *
+	 * Defaults to `false`, matching Multicall3's strict `aggregate3` behavior when
+	 * a call does not explicitly opt into failure.
+	 */
+	allowFailure?: boolean;
+};
+
+/**
  * One decoded Ghostcall result entry.
  */
-export type GhostcallResult = {
+type GhostcallResult = {
 	/**
 	 * Indicates whether the underlying EVM `CALL` returned successfully.
 	 *
@@ -45,6 +61,21 @@ export type GhostcallResult = {
 	 * ABI decoding and failure policy to the caller.
 	 */
 	returnData: Hex;
+};
+
+/**
+ * Minimal EIP-1193 provider interface that only requires the request method
+ * Used throughout the SDK for blockchain interactions
+ * Compatible with both Ox and Viem providers
+ *
+ * Note: We use a bivariant hack with method callback to ensure compatibility
+ * with various provider implementations (Viem, Ethers, Ox, etc.) that have
+ * different type signatures for the request method. This allows the SDK
+ * to work with any EIP-1193 compliant provider without requiring users to
+ * install specific provider libraries.
+ */
+type EIP1193ProviderWithRequestFn = {
+	request(args: { method: string; params?: unknown }): Promise<unknown>;
 };
 
 const addressHexLength = 40;
@@ -91,7 +122,7 @@ const bundledInitcodeSize = byteLength(ghostcallInitcode);
  * // Later:
  * // provider.request({ method: "eth_call", params: [{ data }, "latest"] })
  */
-export function encodeCalls(calls: readonly GhostcallCall[]): Hex {
+function encodeCalls(calls: readonly GhostcallCall[]): Hex {
 	const encodedParts = [ghostcallInitcode.slice(2)];
 	let totalEncodedSize = bundledInitcodeSize;
 
@@ -122,6 +153,69 @@ export function encodeCalls(calls: readonly GhostcallCall[]): Hex {
 }
 
 /**
+ * Sends a Ghostcall batch with a CREATE-style `eth_call` and decodes the result.
+ *
+ * This is the provider-facing counterpart to {@link encodeCalls} and
+ * {@link decodeResults}. It sends the bundled Ghostcall initcode as the `data`
+ * field of `eth_call` without a `to` address, then returns decoded result entries
+ * in the same order as the input calls.
+ *
+ * By default, any failed subcall makes this method reject. Set
+ * `allowFailure: true` on a call to receive that failed entry in the returned
+ * results instead.
+ *
+ * @param provider - EIP-1193-compatible provider with a `request` method.
+ * @param calls - Ordered list of subcalls to execute.
+ *
+ * @returns Ordered decoded Ghostcall result entries.
+ *
+ * @throws {TypeError} If inputs are not valid Ghostcall call entries or if the
+ *                     provider returns a non-hex `eth_call` result.
+ * @throws {RangeError} If the encoded CREATE payload exceeds protocol or EVM
+ *                      size limits.
+ * @throws {Error} If a subcall fails without `allowFailure: true`, or if the
+ *                 response entry count does not match the request entry count.
+ *
+ * @example
+ * const results = await aggregateCalls(provider, [
+ *   {
+ *     to: "0x1111111111111111111111111111111111111111",
+ *     data: "0x70a08231000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+ *   },
+ *   {
+ *     to: "0x2222222222222222222222222222222222222222",
+ *     data: "0x18160ddd",
+ *     allowFailure: true,
+ *   },
+ * ]);
+ */
+async function aggregateCalls(
+	provider: EIP1193ProviderWithRequestFn,
+	calls: readonly GhostcallAggregateCall[],
+): Promise<GhostcallResult[]> {
+	const data = encodeCalls(calls);
+	const result = await provider.request({
+		method: "eth_call",
+		params: [{ data }, "latest"],
+	});
+	const entries = decodeResults(assertHex(result, "eth_call result"));
+
+	if (entries.length !== calls.length) {
+		throw new Error(
+			`Ghostcall returned ${entries.length} result entries for ${calls.length} calls`,
+		);
+	}
+
+	for (const [index, entry] of entries.entries()) {
+		if (!entry.success && calls[index]?.allowFailure !== true) {
+			throw new Error(`Ghostcall subcall ${index} failed`);
+		}
+	}
+
+	return entries;
+}
+
+/**
  * Decodes the packed result blob returned by Ghostcall.
  *
  * Each decoded entry corresponds to exactly one subcall in the original batch and
@@ -147,7 +241,7 @@ export function encodeCalls(calls: readonly GhostcallCall[]): Hex {
  * //   { success: false, returnData: "0xdeadbeef" }
  * // ]
  */
-export function decodeResults(data: Hex): GhostcallResult[] {
+function decodeResults(data: Hex): GhostcallResult[] {
 	const normalizedData = assertHex(data, "data");
 
 	if (normalizedData === "0x") {
@@ -250,3 +344,12 @@ function assertHex(value: unknown, label: string): Hex {
 function byteLength(value: Hex): number {
 	return (value.length - 2) / 2;
 }
+
+export type {
+	EIP1193ProviderWithRequestFn,
+	GhostcallAggregateCall,
+	GhostcallCall,
+	GhostcallResult,
+	Hex,
+};
+export { aggregateCalls, decodeResults, encodeCalls };

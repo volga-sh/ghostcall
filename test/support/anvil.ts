@@ -5,15 +5,15 @@ import { createServer } from "node:net";
 
 import { type Hex, RpcTransport } from "ox";
 
-export const defaultSender = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+const defaultSender = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 
-export type RpcErrorObject = {
+type RpcErrorObject = {
 	code: number;
 	message: string;
 	data?: unknown;
 };
 
-export type RawRpcResponse<result> =
+type RawRpcResponse<result> =
 	| {
 			id: number;
 			jsonrpc: "2.0";
@@ -25,20 +25,20 @@ export type RawRpcResponse<result> =
 			error: RpcErrorObject;
 	  };
 
-export type Transport = RpcTransport.Http<false>;
+type Transport = RpcTransport.Http<false>;
 
-export type AnvilInstance = {
+type AnvilInstance = {
 	child: ReturnType<typeof spawn>;
 	logs: string[];
 	transport: Transport;
 	url: string;
 };
 
-export type StartAnvilOptions = {
+type StartAnvilOptions = {
 	args?: readonly string[];
 };
 
-export async function startAnvil(
+async function startAnvil(
 	options: StartAnvilOptions = {},
 ): Promise<AnvilInstance> {
 	const port = await getFreePort();
@@ -72,7 +72,7 @@ export async function startAnvil(
 	return { child, logs, transport, url };
 }
 
-export async function stopAnvil(anvil: AnvilInstance): Promise<void> {
+async function stopAnvil(anvil: AnvilInstance): Promise<void> {
 	if (anvil.child.exitCode !== null) {
 		return;
 	}
@@ -88,7 +88,7 @@ export async function stopAnvil(anvil: AnvilInstance): Promise<void> {
 	}
 }
 
-export async function deployContract(
+async function deployContract(
 	transport: Transport,
 	bytecode: Hex.Hex,
 ): Promise<Hex.Hex> {
@@ -107,7 +107,7 @@ export async function deployContract(
 	return receipt.contractAddress as Hex.Hex;
 }
 
-export async function ethCall(
+async function ethCall(
 	transport: Transport,
 	request: { to?: Hex.Hex; from?: Hex.Hex; data: Hex.Hex },
 ): Promise<Hex.Hex> {
@@ -117,7 +117,7 @@ export async function ethCall(
 	})) as Hex.Hex;
 }
 
-export async function ethCallCreate(
+async function ethCallCreate(
 	transport: Transport,
 	data: Hex.Hex,
 ): Promise<Hex.Hex> {
@@ -127,7 +127,7 @@ export async function ethCallCreate(
 	});
 }
 
-export async function ethCallCreateRaw(
+async function ethCallCreateRaw(
 	transport: Transport,
 	data: Hex.Hex,
 ): Promise<RawRpcResponse<Hex.Hex>> {
@@ -146,7 +146,7 @@ export async function ethCallCreateRaw(
 	)) as RawRpcResponse<Hex.Hex>;
 }
 
-export async function sendTransaction(
+async function sendTransaction(
 	transport: Transport,
 	request: { to?: Hex.Hex; data: Hex.Hex },
 ): Promise<Hex.Hex> {
@@ -246,3 +246,21 @@ function sleep(milliseconds: number): Promise<void> {
 		setTimeout(resolve, milliseconds);
 	});
 }
+
+export type {
+	AnvilInstance,
+	RawRpcResponse,
+	RpcErrorObject,
+	StartAnvilOptions,
+	Transport,
+};
+export {
+	defaultSender,
+	deployContract,
+	ethCall,
+	ethCallCreate,
+	ethCallCreateRaw,
+	sendTransaction,
+	startAnvil,
+	stopAnvil,
+};

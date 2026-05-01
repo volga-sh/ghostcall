@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { decodeResults, encodeCalls } from "../src/sdk/index.ts";
+import {
+	aggregateCalls,
+	decodeResults,
+	encodeCalls,
+} from "../src/sdk/index.ts";
 
 const maxCreateInitcodeSize = 0xc000;
 const encodedCallHeaderSize = 0x16;
@@ -139,5 +143,92 @@ test("Ghostcall SDK", async (t) => {
 	await t.test("rejects truncated result headers and bodies", () => {
 		assert.throws(() => decodeResults("0x00"), TypeError);
 		assert.throws(() => decodeResults("0x8002ff"), TypeError);
+	});
+
+	await t.test(
+		"sends a CREATE-style eth_call and decodes results",
+		async () => {
+			const calls = [
+				{
+					to: "0x1111111111111111111111111111111111111111",
+					data: "0xaabb",
+				},
+				{
+					to: "0x2222222222222222222222222222222222222222",
+					data: "0x",
+					allowFailure: true,
+				},
+			] as const;
+			const requests: unknown[] = [];
+			const provider = {
+				async request(args: {
+					method: string;
+					params?: unknown;
+				}): Promise<unknown> {
+					requests.push(args);
+					return "0x8001aa0001bb";
+				},
+			};
+
+			const results = await aggregateCalls(provider, calls);
+
+			assert.deepEqual(requests, [
+				{
+					method: "eth_call",
+					params: [{ data: encodeCalls(calls) }, "latest"],
+				},
+			]);
+			assert.deepEqual(results, [
+				{ success: true, returnData: "0xaa" },
+				{ success: false, returnData: "0xbb" },
+			]);
+		},
+	);
+
+	await t.test(
+		"rejects failed subcalls unless allowFailure is set",
+		async () => {
+			const provider = {
+				async request(): Promise<unknown> {
+					return "0x0001ff";
+				},
+			};
+
+			await assert.rejects(
+				aggregateCalls(provider, [
+					{
+						to: "0x1111111111111111111111111111111111111111",
+						data: "0x",
+					},
+				]),
+				/Ghostcall subcall 0 failed/,
+			);
+		},
+	);
+
+	await t.test("rejects malformed aggregate provider results", async () => {
+		const call = {
+			to: "0x1111111111111111111111111111111111111111",
+			data: "0x",
+		} as const;
+		const nonHexProvider = {
+			async request(): Promise<unknown> {
+				return 123;
+			},
+		};
+		const missingEntryProvider = {
+			async request(): Promise<unknown> {
+				return "0x";
+			},
+		};
+
+		await assert.rejects(
+			aggregateCalls(nonHexProvider, [call]),
+			/eth_call result must be a hex string/,
+		);
+		await assert.rejects(
+			aggregateCalls(missingEntryProvider, [call]),
+			/Ghostcall returned 0 result entries for 1 calls/,
+		);
 	});
 });

@@ -12,7 +12,7 @@ The implementation lives in [`src/Ghostcall.yul`](src/Ghostcall.yul).
 ## Quick example
 
 ```ts
-import { decodeResults, encodeCalls } from "evm-ghostcall";
+import { aggregateCalls } from "evm-ghostcall";
 import {
 	createPublicClient,
 	decodeFunctionResult,
@@ -36,7 +36,7 @@ const client = createPublicClient({
 	transport: http(),
 });
 
-const data = encodeCalls([
+const [balanceResult, allowanceResult] = await aggregateCalls(client, [
 	{
 		to: token,
 		data: encodeFunctionData({
@@ -55,15 +55,8 @@ const data = encodeCalls([
 	},
 ]);
 
-const rawResult = await client.request({
-	method: "eth_call",
-	params: [{ data }, "latest"],
-});
-
-const [balanceResult, allowanceResult] = decodeResults(rawResult);
-
-if (!balanceResult?.success || !allowanceResult?.success) {
-	throw new Error("Ghostcall subcall failed");
+if (!balanceResult || !allowanceResult) {
+	throw new Error("Unexpected Ghostcall response shape");
 }
 
 const balance = decodeFunctionResult({
@@ -106,15 +99,20 @@ That keeps the dependency footprint small while giving us a stable place to grow
 The repository also includes a minimal internal-first TypeScript SDK in
 [`src/sdk/index.ts`](src/sdk/index.ts).
 
-It intentionally does only two things:
+It intentionally exposes only the small protocol surface:
 
 - `encodeCalls(calls)` bundles the canonical Ghostcall initcode and returns the full CREATE-style `eth_call` data blob.
 - `decodeResults(data)` parses the packed Ghostcall response format into `{ success, returnData }` entries.
+- `aggregateCalls(provider, calls)` sends the CREATE-style `eth_call` through an EIP-1193 `request` provider and decodes the response.
 
 `encodeCalls` fails fast if any subcall exceeds the `uint16` calldata limit or if the full
 encoded CREATE payload would exceed the EVM initcode size ceiling.
 
-The SDK has no provider helpers, no ABI helpers, and no runtime artifact reads.
+`aggregateCalls` treats `allowFailure` as an SDK-side policy. Failed subcalls reject by default,
+matching Multicall3-style strict batches, while calls marked `allowFailure: true` are returned as
+ordinary `{ success: false, returnData }` entries.
+
+The SDK has no ABI helpers and no runtime artifact reads.
 
 ## Current scope
 
@@ -283,6 +281,7 @@ The test suite:
 - deploys and configures `MockContract` from Foundry artifacts,
 - encodes function calldata with `ox`,
 - executes a CREATE-style `eth_call` against Ghostcall,
+- dogfoods the provider-facing SDK aggregation helper,
 - decodes both function return data and revert data with `ox`,
 - verifies configurable success paths, calldata-vs-method precedence, inline failure entries, the empty-batch case, the CREATE request-size boundary, the CREATE return-size boundary, and top-level malformed-payload handling.
 
