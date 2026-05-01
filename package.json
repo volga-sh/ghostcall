@@ -1,11 +1,37 @@
 {
 	"name": "@volga/evm-ghostcall",
-	"private": true,
+	"version": "0.1.0",
+	"description": "Zero-deployment batching program and TypeScript SDK for CREATE-style eth_call requests.",
+	"license": "MIT",
 	"type": "module",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/volga-sh/ghostcall.git"
+	},
+	"bugs": {
+		"url": "https://github.com/volga-sh/ghostcall/issues"
+	},
+	"homepage": "https://github.com/volga-sh/ghostcall#readme",
+	"main": "./dist/sdk/index.js",
+	"types": "./dist/sdk/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/sdk/index.d.ts",
+			"import": "./dist/sdk/index.js"
+		}
+	},
+	"files": [
+		"dist/",
+		"src/Ghostcall.yul"
+	],
+	"sideEffects": false,
+	"publishConfig": {
+		"access": "public"
+	},
 	"scripts": {
 		"benchmark:limits": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/benchmark-limits.ts",
 		"build:contracts": "forge build && npm run generate:sdk:initcode",
-		"build:sdk": "npm run build:contracts && npm run typecheck",
+		"build:sdk": "npm run build:contracts && tsc --project tsconfig.build.json",
 		"check": "biome check .",
 		"check:fix": "biome check --write .",
 		"check:sdk:initcode": "git diff --exit-code -- src/sdk/generated/initcode.ts",
@@ -14,6 +40,7 @@
 		"generate:sdk:initcode": "node scripts/generate-sdk-initcode.mjs",
 		"lint": "biome lint .",
 		"lint:fix": "npm run check:fix",
+		"prepack": "npm run build:sdk",
 		"test": "npm run build:contracts && node --disable-warning=ExperimentalWarning --experimental-strip-types --test test/*.test.ts",
 		"test:watch": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test --watch test/*.test.ts",
 		"typecheck": "tsc --project tsconfig.json"

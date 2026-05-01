@@ -12,7 +12,7 @@ The implementation lives in [`src/Ghostcall.yul`](src/Ghostcall.yul).
 ## Quick example
 
 ```ts
-import { aggregateCalls } from "evm-ghostcall";
+import { aggregateCalls } from "@volga/evm-ghostcall";
 import {
 	createPublicClient,
 	decodeFunctionResult,
@@ -98,6 +98,12 @@ The repository now uses a minimal TypeScript-based test stack:
 That keeps the dependency footprint small while giving us a stable place to grow ABI-heavy tests.
 
 ## TypeScript SDK
+
+Install the SDK from npm:
+
+```bash
+npm install @volga/evm-ghostcall
+```
 
 The repository also includes a minimal internal-first TypeScript SDK in
 [`src/sdk/index.ts`](src/sdk/index.ts).
