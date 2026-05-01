@@ -156,15 +156,7 @@ type GhostcallAggregateImplementationResults<
 			: never);
 
 /**
- * Minimal EIP-1193 provider interface that only requires the request method
- * Used throughout the SDK for blockchain interactions
- * Compatible with both Ox and Viem providers
- *
- * Note: We use a bivariant hack with method callback to ensure compatibility
- * with various provider implementations (Viem, Ethers, Ox, etc.) that have
- * different type signatures for the request method. This allows the SDK
- * to work with any EIP-1193 compliant provider without requiring users to
- * install specific provider libraries.
+ * Minimal EIP-1193 provider shape used by the SDK.
  */
 type EIP1193ProviderWithRequestFn = {
 	request(args: { method: string; params?: unknown }): Promise<unknown>;
@@ -323,6 +315,8 @@ async function aggregateCalls<
 	calls: TCalls,
 	options: GhostcallAggregateOptions | GhostcallDecodedAggregateOptions = {},
 ): Promise<GhostcallAggregateImplementationResults<TCalls>> {
+	let decodedCalls: readonly GhostcallDecodedAggregateCall[] | undefined;
+
 	if (options.results === "decoded") {
 		for (const [index, call] of calls.entries()) {
 			if (call.allowFailure === true) {
@@ -337,6 +331,8 @@ async function aggregateCalls<
 				);
 			}
 		}
+
+		decodedCalls = calls as readonly GhostcallDecodedAggregateCall[];
 	}
 
 	const data = encodeCalls(calls);
@@ -358,6 +354,17 @@ async function aggregateCalls<
 		}
 	}
 
+	if (decodedCalls !== undefined) {
+		return entries.map((entry, index) => {
+			const call = decodedCalls[index];
+			if (call === undefined) {
+				throw new Error("Ghostcall decoded call invariant failed");
+			}
+
+			return call.decodeResult(entry.returnData, entry, index);
+		}) as GhostcallAggregateImplementationResults<TCalls>;
+	}
+
 	const decodedEntries = entries.map((entry, index) => {
 		const decodeResult = calls[index]?.decodeResult;
 		if (!entry.success || decodeResult === undefined) {
@@ -370,16 +377,6 @@ async function aggregateCalls<
 			decodedResult: decodeResult(entry.returnData, entry, index),
 		};
 	});
-
-	if (options.results === "decoded") {
-		return decodedEntries.map((entry) => {
-			if (!entry.success || !("decodedResult" in entry)) {
-				throw new Error("Ghostcall decoded result invariant failed");
-			}
-
-			return entry.decodedResult;
-		}) as GhostcallAggregateImplementationResults<TCalls>;
-	}
 
 	return decodedEntries as GhostcallAggregateImplementationResults<TCalls>;
 }

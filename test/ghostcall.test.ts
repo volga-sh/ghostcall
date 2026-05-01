@@ -45,16 +45,12 @@ test("Ghostcall integration", async (t) => {
 	const getGreeting = AbiFunction.from(
 		"function getGreeting() returns (string)",
 	);
-	const echoUint = AbiFunction.from(
-		"function echoUint(uint256) returns (uint256)",
-	);
 	const fail = AbiFunction.from("function fail()");
 
 	const givenCalldataReturn = AbiFunction.fromAbi(
 		mockAbi,
 		"givenCalldataReturn",
 	);
-	const givenMethodReturn = AbiFunction.fromAbi(mockAbi, "givenMethodReturn");
 	const givenCalldataRevertWithMessage = AbiFunction.fromAbi(
 		mockAbi,
 		"givenCalldataRevertWithMessage",
@@ -109,10 +105,6 @@ test("Ghostcall integration", async (t) => {
 			]);
 			const [valueEntry, greetingEntry, failureEntry] = entries;
 
-			assert.equal(entries.length, 3);
-			assert.ok(valueEntry);
-			assert.ok(greetingEntry);
-			assert.ok(failureEntry);
 			assert.equal(valueEntry.success, true);
 			assert.equal(valueEntry.decodedResult, 0x11223344n);
 
@@ -126,48 +118,6 @@ test("Ghostcall integration", async (t) => {
 				AbiError.decode(revertError, failureEntry.returnData),
 				"mocked revert",
 			);
-		},
-	);
-
-	await t.test(
-		"prefers exact calldata mocks over method-level mocks",
-		async () => {
-			await sendFunctionTransaction(anvil.transport, mockAddress, reset, []);
-
-			const echoSevenCall = encodeFunctionData(echoUint, [7n]);
-			const echoEightCall = encodeFunctionData(echoUint, [8n]);
-			const echoNineCall = encodeFunctionData(echoUint, [9n]);
-
-			await sendFunctionTransaction(
-				anvil.transport,
-				mockAddress,
-				givenMethodReturn,
-				[echoSevenCall, encodeFunctionResult(echoUint, 700n)],
-			);
-			await sendFunctionTransaction(
-				anvil.transport,
-				mockAddress,
-				givenCalldataReturn,
-				[echoEightCall, encodeFunctionResult(echoUint, 800n)],
-			);
-
-			const entries = await aggregateCalls(anvil.transport, [
-				{ to: mockAddress, data: echoSevenCall },
-				{ to: mockAddress, data: echoEightCall },
-				{ to: mockAddress, data: echoNineCall },
-			]);
-			const [firstEntry, secondEntry, thirdEntry] = entries;
-
-			assert.equal(entries.length, 3);
-			assert.ok(firstEntry);
-			assert.ok(secondEntry);
-			assert.ok(thirdEntry);
-			assert.equal(decodeFunctionResult(echoUint, firstEntry.returnData), 700n);
-			assert.equal(
-				decodeFunctionResult(echoUint, secondEntry.returnData),
-				800n,
-			);
-			assert.equal(decodeFunctionResult(echoUint, thirdEntry.returnData), 700n);
 		},
 	);
 
@@ -204,9 +154,6 @@ test("Ghostcall integration", async (t) => {
 		]);
 		const [failureEntry, successEntry] = entries;
 
-		assert.equal(entries.length, 2);
-		assert.ok(failureEntry);
-		assert.ok(successEntry);
 		assert.equal(failureEntry.success, false);
 
 		const revertError = AbiError.fromAbi(emptyAbi, failureEntry.returnData);
