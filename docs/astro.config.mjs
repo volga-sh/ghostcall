@@ -3,6 +3,8 @@ import { defineConfig } from "astro/config";
 
 const site = "https://ghostcall.volga.sh";
 const socialImage = new URL("/og.png", site).href;
+const socialImageAlt =
+	"ghostcall docs: Batch EVM blockchain reads without deployment dependencies.";
 
 export default defineConfig({
 	site,
@@ -36,9 +38,12 @@ export default defineConfig({
 					tag: "meta",
 					attrs: {
 						property: "og:image:alt",
-						content:
-							"ghostcall docs: Batch EVM blockchain reads without deployment dependencies.",
+						content: socialImageAlt,
 					},
+				},
+				{
+					tag: "meta",
+					attrs: { name: "twitter:card", content: "summary_large_image" },
 				},
 				{
 					tag: "meta",
@@ -48,8 +53,7 @@ export default defineConfig({
 					tag: "meta",
 					attrs: {
 						name: "twitter:image:alt",
-						content:
-							"ghostcall docs: Batch EVM blockchain reads without deployment dependencies.",
+						content: socialImageAlt,
 					},
 				},
 			],
