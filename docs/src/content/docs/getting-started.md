@@ -14,7 +14,7 @@ npm install @volga-sh/evm-ghostcall
 The SDK accepts an EIP-1193-style provider and raw call entries. ABI libraries such as viem or ox remain caller-owned.
 
 ```ts
-import { aggregateCalls } from "@volga-sh/evm-ghostcall";
+import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
 import {
 	createPublicClient,
 	decodeFunctionResult,
@@ -29,20 +29,20 @@ const erc20Abi = parseAbi([
 	"function allowance(address owner, address spender) view returns (uint256)",
 ]);
 
-const token = "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
-const owner = "0x1111111111111111111111111111111111111111";
-const spender = "0x2222222222222222222222222222222222222222";
+const usdc = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+const owner = "0x28C6c06298d514Db089934071355E5743bf21d60";
+const spender = "0xE592427A0AEce92De3Edee1F18E0157C05861564";
 
 const client = createPublicClient({
 	chain: mainnet,
 	transport: http(),
 });
 
-const [balance, allowance] = await aggregateCalls(
+const [balance, allowance] = await aggregateDecodedCalls(
 	client,
 	[
 		{
-			to: token,
+			to: usdc,
 			data: encodeFunctionData({
 				abi: erc20Abi,
 				functionName: "balanceOf",
@@ -56,7 +56,7 @@ const [balance, allowance] = await aggregateCalls(
 				}),
 		},
 		{
-			to: token,
+			to: usdc,
 			data: encodeFunctionData({
 				abi: erc20Abi,
 				functionName: "allowance",
@@ -70,7 +70,6 @@ const [balance, allowance] = await aggregateCalls(
 				}),
 		},
 	],
-	{ results: "decoded" },
 );
 
 console.log({ balance, allowance });
@@ -85,8 +84,9 @@ import { decodeResults, encodeCalls } from "@volga-sh/evm-ghostcall";
 
 const data = encodeCalls([
 	{
-		to: "0x1111111111111111111111111111111111111111",
-		data: "0x70a08231000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		// WETH9 on Ethereum mainnet: totalSupply()
+		to: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+		data: "0x18160ddd",
 	},
 ]);
 
@@ -100,8 +100,10 @@ const results = decodeResults(response as `0x${string}`);
 
 The `eth_call` object intentionally omits `to`. That is what makes the EVM execute the supplied data as CREATE initcode.
 
+Some RPC providers do not support this CREATE-style `eth_call` pattern consistently, so verify the exact endpoint you plan to use.
+
 ## Failure policy
 
 Subcall failures are returned by the protocol as result entries. `aggregateCalls()` rejects failed entries by default. Set `allowFailure: true` on a call when you want that failed entry returned to the caller instead.
 
-Decoded-results mode is strict: every call must provide `decodeResult`, and `allowFailure` cannot be true.
+`aggregateDecodedCalls()` is the strict decoded helper: every call must provide `decodeResult`, and `allowFailure` cannot be true. Batch order also matters for gas usage because each subcall receives all remaining gas when it runs.

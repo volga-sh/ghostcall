@@ -10,7 +10,7 @@ back as the RPC result.
 ## Docs
 
 The documentation site lives in [`docs/src/content/docs`](docs/src/content/docs). Run
-`npm run dev --prefix docs` locally or `npm run build --prefix docs` to build the static
+`npm run docs:dev` locally or `npm run docs:build` to build the static
 Starlight site.
 
 ## Install
@@ -22,7 +22,7 @@ npm install @volga-sh/evm-ghostcall
 ## Quick example
 
 ```ts
-import { aggregateCalls } from "@volga-sh/evm-ghostcall";
+import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
 import {
 	createPublicClient,
 	decodeFunctionResult,
@@ -37,20 +37,20 @@ const erc20Abi = parseAbi([
 	"function allowance(address owner, address spender) view returns (uint256)",
 ]);
 
-const token = "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
-const owner = "0x1111111111111111111111111111111111111111";
-const spender = "0x2222222222222222222222222222222222222222";
+const usdc = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+const owner = "0x28C6c06298d514Db089934071355E5743bf21d60";
+const spender = "0xE592427A0AEce92De3Edee1F18E0157C05861564";
 
 const client = createPublicClient({
 	chain: mainnet,
 	transport: http(),
 });
 
-const [balance, allowance] = await aggregateCalls(
+const [balance, allowance] = await aggregateDecodedCalls(
 	client,
 	[
 		{
-			to: token,
+			to: usdc,
 			data: encodeFunctionData({
 				abi: erc20Abi,
 				functionName: "balanceOf",
@@ -64,7 +64,7 @@ const [balance, allowance] = await aggregateCalls(
 				}),
 		},
 		{
-			to: token,
+			to: usdc,
 			data: encodeFunctionData({
 				abi: erc20Abi,
 				functionName: "allowance",
@@ -78,7 +78,6 @@ const [balance, allowance] = await aggregateCalls(
 				}),
 		},
 	],
-	{ results: "decoded" },
 );
 
 console.log({
@@ -91,21 +90,28 @@ console.log({
 
 The TypeScript SDK intentionally exposes only the small protocol surface:
 
-- `encodeCalls(calls)` bundles the canonical Ghostcall initcode and returns the full CREATE-style `eth_call` data blob.
+- `encodeCalls(calls, options?)` bundles the canonical Ghostcall initcode and returns the full CREATE-style `eth_call` data blob.
 - `decodeResults(data)` parses the packed Ghostcall response format into `{ success, returnData }` entries.
-- `aggregateCalls(provider, calls, options?)` sends the CREATE-style `eth_call` through an EIP-1193 `request` provider, decodes the packed response, and optionally runs each call's `decodeResult` callback.
+- `aggregateCalls(provider, calls, options?)` sends the CREATE-style `eth_call` through an EIP-1193 `request` provider and returns raw `{ success, returnData }` entries.
+- `aggregateDecodedCalls(provider, calls, options?)` sends the same request path for strict batches and returns decoded values directly.
 
 `encodeCalls` fails fast if any subcall exceeds the `uint16` calldata limit or if the full
-encoded CREATE payload would exceed the EVM initcode size ceiling.
+encoded CREATE payload would exceed the configured CREATE initcode ceiling. By default that ceiling
+is Ethereum's EIP-3860 `49,152`-byte limit, but callers can override it with `maxInitcodeBytes`
+when targeting environments with different rules.
 
 `aggregateCalls` treats `allowFailure` as an SDK-side policy. Failed subcalls reject by default,
 matching Multicall3-style strict batches, while calls marked `allowFailure: true` are returned as
-ordinary `{ success: false, returnData }` entries.
+ordinary `{ success: false, returnData }` entries. Strict failures throw `GhostcallSubcallError`,
+which preserves the subcall index, original call, and raw failed result entry so callers can inspect
+revert data.
 
 The SDK has no ABI helpers and no runtime artifact reads. To ABI-decode successful entries, pass
-`decodeResult` callbacks that call the ABI library already used by the application. By default,
-`aggregateCalls` returns result entries. Pass `{ results: "decoded" }` to return decoded values
-directly.
+`decodeResult` callbacks to `aggregateDecodedCalls` and use the ABI library already used by the
+application. Use `options.ethCall` to set outer `eth_call` fields such as `from`, `gas`, and
+`blockTag`. In TypeScript, `aggregateDecodedCalls` requires `decodeResult` on every call and does
+not accept `allowFailure`. `blockTag` accepts named tags such as `latest` or `safe`, canonical hex
+quantities, and decimal block numbers passed as strings, numbers, or bigints.
 
 ## Why this works
 
@@ -114,6 +120,10 @@ directly.
 - Initcode can perform ordinary external calls, pack the returned bytes into memory, and `RETURN` them.
 - Returned bytes are still subject to CREATE limits because the client treats them as would-be
   runtime bytecode.
+
+Some RPC providers still reject or special-case CREATE-style `eth_call` requests without a `to`
+field. Treat endpoint compatibility as an environment constraint and test the exact provider you
+plan to use.
 
 The implementation lives in [`src/Ghostcall.yul`](src/Ghostcall.yul).
 
@@ -134,12 +144,18 @@ That keeps the dependency footprint small while giving us a stable place to grow
 This implementation is intentionally focused on the smallest SDK-first variant:
 
 - zero-value `CALL` for subcalls
+- all remaining gas forwarded to each subcall
 - packed binary input instead of ABI encoding
 - packed binary output instead of ABI encoding
 - always-return result entries for every subcall
 - SDK-enforced strict failure policy instead of engine-enforced batch reverts
 
 That keeps the initcode small, auditable, and easy to extend.
+
+Because subcalls use ordinary `CALL`, they execute from ghostcall's ephemeral CREATE context rather
+than the external account that made the JSON-RPC request. Later subcalls in the same batch can also
+observe state changes made by earlier subcalls during that one simulated execution. Batch order also
+affects gas availability because each subcall receives all remaining gas at the time it runs.
 
 ## Why not a naive Solidity constructor
 

@@ -18,11 +18,18 @@ At runtime, SDK boundary functions reject values that are not strings, do not st
 ## encodeCalls()
 
 ```ts
-function encodeCalls(calls: readonly GhostcallCall[]): Hex;
+function encodeCalls(
+	calls: readonly GhostcallCall[],
+	options?: GhostcallEncodeOptions,
+): Hex;
 
 type GhostcallCall = {
 	to: Hex;
 	data: Hex;
+};
+
+type GhostcallEncodeOptions = {
+	maxInitcodeBytes?: number;
 };
 ```
 
@@ -46,6 +53,8 @@ Validation is intentionally eager:
 - `data` must be valid even-length hex.
 - A single call's data must fit in `uint16`, so it cannot exceed `65,535` bytes.
 - The full initcode plus payload must fit the configured CREATE initcode ceiling.
+
+If `maxInitcodeBytes` is omitted, the SDK defaults to Ethereum's EIP-3860 limit of `49,152` bytes.
 
 ## decodeResults()
 
@@ -76,42 +85,83 @@ async function aggregateCalls(
 	provider,
 	calls,
 	options?,
-): Promise<GhostcallAggregateResult[]>;
+): Promise<GhostcallResult[]>;
 ```
 
 `aggregateCalls()` performs the provider-facing flow:
 
 1. Encode the call list with `encodeCalls()`.
-2. Send `eth_call` with `{ data }` and no `to`.
+2. Send `eth_call` with `{ data }` and any configured `from` / `gas`, without a `to`.
 3. Decode the packed response with `decodeResults()`.
 4. Enforce result count and failure policy.
-5. Run any per-call `decodeResult` callbacks for successful entries.
 
-By default, results are returned as entries:
+The aggregate options also accept outer `eth_call` controls:
+
+```ts
+type GhostcallEthCallOptions = {
+	from?: Hex;
+	gas?: `0x${string}`;
+	blockTag?: string | number | bigint;
+};
+```
+
+`blockTag` accepts named tags such as `latest`, `safe`, and `finalized`, canonical hex quantities such as `0x1234`, and decimal block numbers passed as strings, numbers, or bigints. Decimal inputs are normalized to hex quantities before the RPC request is sent.
+
+Subcalls run in order, use ordinary `CALL`, and each one receives all remaining gas at the point it executes. That means earlier calls can affect later ones through both ephemeral state changes and gas consumption.
+
+`aggregateCalls()` always returns raw entries:
 
 ```ts
 const results = await aggregateCalls(provider, [
 	{
-		to: "0x1111111111111111111111111111111111111111",
+		// WETH9 on Ethereum mainnet: totalSupply()
+		to: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
 		data: "0x18160ddd",
 	},
 ]);
 ```
 
-Set `results: "decoded"` to return only decoded values:
+Strict mode throws `GhostcallSubcallError` when a subcall fails. The error preserves the failed index, original call, and raw `{ success: false, returnData }` entry so callers can inspect revert data without switching to `allowFailure: true`.
+
+## aggregateDecodedCalls()
 
 ```ts
-const [totalSupply] = await aggregateCalls(
+async function aggregateDecodedCalls(
+	provider,
+	calls,
+	options?,
+): Promise<unknown[]>;
+```
+
+`aggregateDecodedCalls()` uses the same transport flow as `aggregateCalls()`, but it is the strict decoded helper:
+
+- its TypeScript input requires `decodeResult` on every call
+- its TypeScript input does not accept `allowFailure`
+- any failed subcall rejects with `GhostcallSubcallError`
+
+In TypeScript, the actual return type is inferred from the input call tuple and each call's `decodeResult` callback.
+
+Use it when you want decoded values directly:
+
+```ts
+import { decodeFunctionResult, parseAbi } from "viem";
+
+const erc20Abi = parseAbi(["function totalSupply() view returns (uint256)"]);
+const weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+
+const [totalSupply] = await aggregateDecodedCalls(
 	provider,
 	[
 		{
-			to: token,
+			to: weth,
 			data: "0x18160ddd",
-			decodeResult: (returnData) => decodeTotalSupply(returnData),
+			decodeResult: (returnData) =>
+				decodeFunctionResult({
+					abi: erc20Abi,
+					functionName: "totalSupply",
+					data: returnData,
+				}),
 		},
 	],
-	{ results: "decoded" },
 );
 ```
-
-Decoded-results mode rejects invalid call lists before sending the RPC request if a call is missing `decodeResult` or sets `allowFailure: true`.

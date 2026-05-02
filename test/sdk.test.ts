@@ -3,19 +3,43 @@ import test from "node:test";
 
 import {
 	aggregateCalls,
+	aggregateDecodedCalls,
 	decodeResults,
 	encodeCalls,
+	GhostcallSubcallError,
 } from "../src/sdk/index.ts";
 
 const maxCreateInitcodeSize = 0xc000;
 const encodedCallHeaderSize = 0x16;
 
 test("Ghostcall SDK", async (t) => {
-	await t.test("returns bundled initcode for an empty call list", () => {
+	await t.test("supports empty call lists and custom initcode ceilings", () => {
 		const data = encodeCalls([]);
+		const bundledInitcodeSize = (data.length - 2) / 2;
 
 		assert.match(data, /^0x[0-9a-fA-F]+$/);
 		assert.notEqual(data, "0x");
+		assert.throws(
+			() => encodeCalls([], { maxInitcodeBytes: bundledInitcodeSize - 1 }),
+			RangeError,
+		);
+	});
+
+	await t.test("encodes calldata at the uint16 limit", () => {
+		const baseData = encodeCalls([]);
+		const maxSizedCall = {
+			to: "0x1111111111111111111111111111111111111111",
+			data: `0x${"00".repeat(0xffff)}` as `0x${string}`,
+		} as const;
+		const maxInitcodeBytes =
+			(baseData.length - 2) / 2 + encodedCallHeaderSize + 0xffff;
+
+		const encoded = encodeCalls([maxSizedCall], { maxInitcodeBytes });
+
+		assert.equal(
+			(encoded.length - 2) / 2,
+			(baseData.length - 2) / 2 + encodedCallHeaderSize + 0xffff,
+		);
 	});
 
 	await t.test(
@@ -126,10 +150,18 @@ test("Ghostcall SDK", async (t) => {
 			{ length: maxEmptyCalls },
 			() => emptyCall,
 		);
-		const maxSizedData = encodeCalls(maxSizedBatch);
+		const maxSizedData = encodeCalls(maxSizedBatch, {
+			maxInitcodeBytes: maxCreateInitcodeSize,
+		});
 
-		assert.ok((maxSizedData.length - 2) / 2 < maxCreateInitcodeSize);
-		assert.throws(() => encodeCalls([...maxSizedBatch, emptyCall]), RangeError);
+		assert.ok((maxSizedData.length - 2) / 2 <= maxCreateInitcodeSize);
+		assert.throws(
+			() =>
+				encodeCalls([...maxSizedBatch, emptyCall], {
+					maxInitcodeBytes: maxCreateInitcodeSize,
+				}),
+			RangeError,
+		);
 	});
 
 	await t.test("decodes empty and mixed result payloads", () => {
@@ -146,7 +178,7 @@ test("Ghostcall SDK", async (t) => {
 	});
 
 	await t.test(
-		"sends a CREATE-style eth_call and decodes results",
+		"forwards CREATE-style eth_call params and returns raw results",
 		async () => {
 			const calls = [
 				{
@@ -170,12 +202,25 @@ test("Ghostcall SDK", async (t) => {
 				},
 			};
 
-			const results = await aggregateCalls(provider, calls);
+			const results = await aggregateCalls(provider, calls, {
+				ethCall: {
+					from: "0x3333333333333333333333333333333333333333",
+					gas: "0x5208",
+					blockTag: 123,
+				},
+			});
 
 			assert.deepEqual(requests, [
 				{
 					method: "eth_call",
-					params: [{ data: encodeCalls(calls) }, "latest"],
+					params: [
+						{
+							data: encodeCalls(calls),
+							from: "0x3333333333333333333333333333333333333333",
+							gas: "0x5208",
+						},
+						"0x7b",
+					],
 				},
 			]);
 			assert.deepEqual(results, [
@@ -186,7 +231,7 @@ test("Ghostcall SDK", async (t) => {
 	);
 
 	await t.test(
-		"runs per-call result decoders for successful aggregate entries",
+		"returns decoded values directly through aggregateDecodedCalls",
 		async () => {
 			const calls = [
 				{
@@ -207,117 +252,45 @@ test("Ghostcall SDK", async (t) => {
 				},
 			};
 
-			const results = await aggregateCalls(provider, calls);
-
-			assert.deepEqual(results, [
-				{ success: true, returnData: "0x2a", decodedResult: 42 },
-				{ success: true, returnData: "0xbabe", decodedResult: "0XBABE" },
-			]);
-		},
-	);
-
-	await t.test(
-		"does not run a result decoder for an allowed failed aggregate entry",
-		async () => {
-			const provider = {
-				async request(): Promise<unknown> {
-					return "0x0001ff";
-				},
-			};
-
-			const [result] = await aggregateCalls(provider, [
-				{
-					to: "0x1111111111111111111111111111111111111111",
-					data: "0x",
-					allowFailure: true,
-					decodeResult: () => {
-						throw new Error("decoder should not run");
-					},
-				},
-			]);
-
-			assert.deepEqual(result, { success: false, returnData: "0xff" });
-		},
-	);
-
-	await t.test(
-		"returns decoded values directly in decoded-results mode",
-		async () => {
-			const calls = [
-				{
-					to: "0x1111111111111111111111111111111111111111",
-					data: "0xaabb",
-					decodeResult: (returnData: `0x${string}`) =>
-						Number.parseInt(returnData.slice(2), 16),
-				},
-				{
-					to: "0x2222222222222222222222222222222222222222",
-					data: "0xccdd",
-					decodeResult: (returnData: `0x${string}`) => returnData.toUpperCase(),
-				},
-			] as const;
-			const provider = {
-				async request(): Promise<unknown> {
-					return "0x80012a8002babe";
-				},
-			};
-
-			const results = await aggregateCalls(provider, calls, {
-				results: "decoded",
-			});
+			const results = await aggregateDecodedCalls(provider, calls);
 
 			assert.deepEqual(results, [42, "0XBABE"]);
 		},
 	);
 
 	await t.test(
-		"rejects decoded-results mode when a decoder is missing",
+		"rejects failed decoded subcalls through aggregateDecodedCalls",
 		async () => {
+			const decodeResult = (returnData: `0x${string}`) => returnData;
 			const provider = {
 				async request(): Promise<unknown> {
-					return "0x";
+					return "0x0001ff";
 				},
 			};
 
 			await assert.rejects(
-				aggregateCalls(
-					provider,
-					[
-						{
-							to: "0x1111111111111111111111111111111111111111",
-							data: "0x",
-						},
-					] as never,
-					{ results: "decoded" },
-				),
-				/calls\[0\].decodeResult is required/,
-			);
-		},
-	);
-
-	await t.test(
-		"rejects decoded-results mode when allowFailure is true",
-		async () => {
-			const provider = {
-				async request(): Promise<unknown> {
-					return "0x";
+				aggregateDecodedCalls(provider, [
+					{
+						to: "0x1111111111111111111111111111111111111111",
+						data: "0x",
+						decodeResult,
+					},
+				]),
+				(error: unknown) => {
+					assert.ok(error instanceof GhostcallSubcallError);
+					assert.equal(error.message, "Ghostcall subcall 0 failed");
+					assert.equal(error.index, 0);
+					assert.deepEqual(error.call, {
+						to: "0x1111111111111111111111111111111111111111",
+						data: "0x",
+						decodeResult,
+					});
+					assert.deepEqual(error.result, {
+						success: false,
+						returnData: "0xff",
+					});
+					return true;
 				},
-			};
-
-			await assert.rejects(
-				aggregateCalls(
-					provider,
-					[
-						{
-							to: "0x1111111111111111111111111111111111111111",
-							data: "0x",
-							allowFailure: true,
-							decodeResult: (returnData: `0x${string}`) => returnData,
-						},
-					] as never,
-					{ results: "decoded" },
-				),
-				/calls\[0\].allowFailure cannot be true/,
 			);
 		},
 	);
@@ -338,7 +311,20 @@ test("Ghostcall SDK", async (t) => {
 						data: "0x",
 					},
 				]),
-				/Ghostcall subcall 0 failed/,
+				(error: unknown) => {
+					assert.ok(error instanceof GhostcallSubcallError);
+					assert.equal(error.message, "Ghostcall subcall 0 failed");
+					assert.equal(error.index, 0);
+					assert.deepEqual(error.call, {
+						to: "0x1111111111111111111111111111111111111111",
+						data: "0x",
+					});
+					assert.deepEqual(error.result, {
+						success: false,
+						returnData: "0xff",
+					});
+					return true;
+				},
 			);
 		},
 	);
@@ -368,4 +354,44 @@ test("Ghostcall SDK", async (t) => {
 			/Ghostcall returned 0 result entries for 1 calls/,
 		);
 	});
+
+	await t.test(
+		"rejects invalid outer eth_call options before RPC",
+		async () => {
+			const call = {
+				to: "0x1111111111111111111111111111111111111111",
+				data: "0x",
+			} as const;
+			const provider = {
+				async request(): Promise<unknown> {
+					assert.fail("invalid eth_call options should not reach the provider");
+				},
+			};
+
+			await assert.rejects(
+				aggregateCalls(provider, [call], {
+					ethCall: { from: "0x1234" as const },
+				}),
+				/options\.ethCall\.from must be a 20-byte hex string/,
+			);
+			await assert.rejects(
+				aggregateCalls(provider, [call], {
+					ethCall: { gas: "123" as never },
+				}),
+				/options\.ethCall\.gas must be a 0x-prefixed hex quantity/,
+			);
+			await assert.rejects(
+				aggregateCalls(provider, [call], {
+					ethCall: { blockTag: -1 as never },
+				}),
+				/options\.ethCall\.blockTag must be a non-negative safe integer, bigint, or non-empty string/,
+			);
+			await assert.rejects(
+				aggregateCalls(provider, [call], {
+					ethCall: { blockTag: "" },
+				}),
+				/options\.ethCall\.blockTag must be a non-negative safe integer, bigint, or non-empty string/,
+			);
+		},
+	);
 });

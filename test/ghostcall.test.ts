@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Abi, AbiError, AbiFunction, Hex } from "ox";
-import { aggregateCalls, encodeCalls } from "../src/sdk/index.ts";
+import {
+	aggregateCalls,
+	aggregateDecodedCalls,
+	encodeCalls,
+} from "../src/sdk/index.ts";
 
 import {
 	deployContract,
@@ -46,11 +50,18 @@ test("Ghostcall integration", async (t) => {
 		"function getGreeting() returns (string)",
 	);
 	const fail = AbiFunction.from("function fail()");
+	const balanceOf = AbiFunction.from(
+		"function balanceOf(address) view returns (uint256)",
+	);
+	const invocationCount = AbiFunction.from(
+		"function invocationCount() returns (uint256)",
+	);
 
 	const givenCalldataReturn = AbiFunction.fromAbi(
 		mockAbi,
 		"givenCalldataReturn",
 	);
+	const givenMethodReturn = AbiFunction.fromAbi(mockAbi, "givenMethodReturn");
 	const givenCalldataRevertWithMessage = AbiFunction.fromAbi(
 		mockAbi,
 		"givenCalldataRevertWithMessage",
@@ -88,7 +99,7 @@ test("Ghostcall integration", async (t) => {
 				[failCall, "mocked revert"],
 			);
 
-			const entries = await aggregateCalls(anvil.transport, [
+			const decodedResults = await aggregateDecodedCalls(anvil.transport, [
 				{
 					to: mockAddress,
 					data: getValueCall,
@@ -101,16 +112,17 @@ test("Ghostcall integration", async (t) => {
 					decodeResult: (returnData) =>
 						decodeFunctionResult(getGreeting, returnData),
 				},
+			]);
+			const failureEntries = await aggregateCalls(anvil.transport, [
 				{ to: mockAddress, data: failCall, allowFailure: true },
 			]);
-			const [valueEntry, greetingEntry, failureEntry] = entries;
+			const [valueResult, greetingResult] = decodedResults;
+			const [failureEntry] = failureEntries;
 
-			assert.equal(valueEntry.success, true);
-			assert.equal(valueEntry.decodedResult, 0x11223344n);
+			assert.equal(valueResult, 0x11223344n);
+			assert.equal(greetingResult, "hello from mock-contract");
 
-			assert.equal(greetingEntry.success, true);
-			assert.equal(greetingEntry.decodedResult, "hello from mock-contract");
-
+			assert.ok(failureEntry);
 			assert.equal(failureEntry.success, false);
 			const revertError = AbiError.fromAbi(emptyAbi, failureEntry.returnData);
 			assert.equal(revertError.name, "Error");
@@ -154,6 +166,7 @@ test("Ghostcall integration", async (t) => {
 		]);
 		const [failureEntry, successEntry] = entries;
 
+		assert.ok(failureEntry);
 		assert.equal(failureEntry.success, false);
 
 		const revertError = AbiError.fromAbi(emptyAbi, failureEntry.returnData);
@@ -163,6 +176,7 @@ test("Ghostcall integration", async (t) => {
 			"fatal mock revert",
 		);
 
+		assert.ok(successEntry);
 		assert.equal(successEntry.success, true);
 		assert.equal(
 			decodeFunctionResult(getValue, successEntry.returnData),
@@ -174,6 +188,36 @@ test("Ghostcall integration", async (t) => {
 		const entries = await aggregateCalls(anvil.transport, []);
 		assert.deepEqual(entries, []);
 	});
+
+	await t.test(
+		"uses CALL semantics so same-batch state changes are visible to later calls",
+		async () => {
+			await sendFunctionTransaction(anvil.transport, mockAddress, reset, []);
+
+			const owner = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+			const balanceCall = encodeFunctionData(balanceOf, [owner]);
+			const invocationCountCall = encodeFunctionData(invocationCount, []);
+
+			await sendFunctionTransaction(
+				anvil.transport,
+				mockAddress,
+				givenMethodReturn,
+				[balanceCall, encodeFunctionResult(balanceOf, 123n)],
+			);
+
+			const [, countEntry] = await aggregateCalls(anvil.transport, [
+				{ to: mockAddress, data: balanceCall },
+				{ to: mockAddress, data: invocationCountCall },
+			]);
+
+			assert.ok(countEntry);
+			assert.equal(countEntry.success, true);
+			assert.equal(
+				decodeFunctionResult(invocationCount, countEntry.returnData),
+				1n,
+			);
+		},
+	);
 
 	await t.test("returns data up to the CREATE return-size limit", async () => {
 		await sendFunctionTransaction(anvil.transport, mockAddress, reset, []);
@@ -254,6 +298,40 @@ test("Ghostcall can return aggregate responses above the old in-contract cap", a
 		assert.equal(entry.success, true);
 		assert.equal(entry.returnData, balanceResult);
 	}
+});
+
+test("Ghostcall returns one entry at the uint15 returndata header limit", async (t) => {
+	const anvil = await startAnvil({ args: ["--code-size-limit", "65536"] });
+	t.after(async () => {
+		await stopAnvil(anvil);
+	});
+
+	const mockArtifact = await loadArtifact(mockArtifactPath);
+	const mockInitcode = readBytecode(mockArtifact, mockArtifactPath);
+	const mockAbi = readAbi(mockArtifact, mockArtifactPath);
+	const mockAddress = await deployContract(anvil.transport, mockInitcode);
+
+	const givenCalldataReturn = AbiFunction.fromAbi(
+		mockAbi,
+		"givenCalldataReturn",
+	);
+	const largeCall = "0x12345678";
+	const maxSizedResponse = `0x${"11".repeat(0x7fff)}` as Hex.Hex;
+
+	await sendFunctionTransaction(
+		anvil.transport,
+		mockAddress,
+		givenCalldataReturn,
+		[largeCall, maxSizedResponse],
+	);
+
+	const [entry] = await aggregateCalls(anvil.transport, [
+		{ to: mockAddress, data: largeCall },
+	]);
+
+	assert.ok(entry);
+	assert.equal(entry.success, true);
+	assert.equal(entry.returnData, maxSizedResponse);
 });
 
 test("Ghostcall reverts when one entry exceeds the uint15 returndata header", async (t) => {

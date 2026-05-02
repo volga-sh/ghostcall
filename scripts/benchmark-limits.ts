@@ -90,15 +90,16 @@ let nextRpcId = 1;
  *
  * @remarks
  * The parser accepts repeatable flags, comma-separated `--token`/`--owner`
- * lists, and environment fallbacks for RPC URL plus benchmark inputs. It keeps
- * validation deliberately light because this is a repo-local diagnostic script:
- * malformed developer input should fail loudly at the nearest protocol boundary.
+ * lists, and environment fallbacks for RPC URL plus benchmark inputs. It still
+ * validates local address-like inputs before any RPC so benchmark failures map to
+ * the developer's request rather than the remote endpoint.
  *
  * @param argv - Arguments after the script name, usually `process.argv.slice(2)`.
  * @param env - Environment source, injectable for tests.
  * @returns Either a help marker or the benchmark config.
  *
  * @throws {Error} If required balance-mode inputs are missing.
+ * @throws {TypeError} If `--from`, `--token`, or `--owner` are not 20-byte hex addresses.
  *
  * @example
  * const parsed = parseBenchmarkArgs([
@@ -208,6 +209,17 @@ function parseBenchmarkArgs(
 		config.gas = quantity(parseNumber("gas", gas));
 	}
 
+	assertAddress(config.from, "--from");
+	if (config.mode === "balances" || config.mode === "all") {
+		for (const [index, token] of config.tokens.entries()) {
+			assertAddress(token, `--token[${index}]`);
+		}
+
+		for (const [index, owner] of config.owners.entries()) {
+			assertAddress(owner, `--owner[${index}]`);
+		}
+	}
+
 	return {
 		help: false,
 		config,
@@ -226,6 +238,7 @@ function parseBenchmarkArgs(
  * @returns Raw calldata for `balanceOf(address)`.
  */
 function encodeBalanceOfCalldata(owner: Hex): Hex {
+	assertAddress(owner, "owner");
 	return `0x${balanceOfSelector}${owner.slice(2).padStart(64, "0")}`;
 }
 
@@ -401,6 +414,8 @@ async function findLimit(
  * @returns Machine-readable benchmark report.
  */
 async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
+	validateBenchmarkConfig(config);
+
 	const chainId = await rpc(config, "eth_chainId", []);
 	const latestBlock = await rpc(config, "eth_blockNumber", []);
 	const ghostcallInitcodeBytes = bytes(encodeCalls([]));
@@ -702,6 +717,32 @@ function format(value: number): string {
 
 function messageFrom(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
+}
+
+function validateBenchmarkConfig(config: BenchmarkConfig): void {
+	assertAddress(config.from, "config.from");
+
+	if (config.mode !== "balances" && config.mode !== "all") {
+		return;
+	}
+
+	for (const [index, token] of config.tokens.entries()) {
+		assertAddress(token, `config.tokens[${index}]`);
+	}
+
+	for (const [index, owner] of config.owners.entries()) {
+		assertAddress(owner, `config.owners[${index}]`);
+	}
+}
+
+function assertAddress(value: unknown, label: string): asserts value is Hex {
+	if (typeof value !== "string") {
+		throw new TypeError(`${label} must be a hex string`);
+	}
+
+	if (!/^0x[0-9a-fA-F]{40}$/.test(value)) {
+		throw new TypeError(`${label} must be a 20-byte hex string`);
+	}
 }
 
 async function main(): Promise<void> {

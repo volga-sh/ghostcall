@@ -3,8 +3,6 @@ import test from "node:test";
 
 import {
 	balanceInputBytesPerCall,
-	balanceReturnedBytesPerCall,
-	buildBalanceCalls,
 	createRawInitcodeSizeProbe,
 	createRawRuntimeReturnProbe,
 	encodeBalanceOfCalldata,
@@ -110,6 +108,58 @@ test("benchmark limit helpers", async (t) => {
 		);
 	});
 
+	await t.test("rejects invalid benchmark addresses during parsing", () => {
+		assert.throws(
+			() =>
+				parseBenchmarkArgs(
+					[
+						"--rpc-url",
+						"https://example.invalid/rpc",
+						"--mode",
+						"balances",
+						"--token",
+						"0x1234",
+						"--owner",
+						ownerA,
+					],
+					{},
+				),
+			/--token\[0\] must be a 20-byte hex string/,
+		);
+		assert.throws(
+			() =>
+				parseBenchmarkArgs(
+					[
+						"--rpc-url",
+						"https://example.invalid/rpc",
+						"--mode",
+						"balances",
+						"--token",
+						tokenA,
+						"--owner",
+						"0x1234",
+					],
+					{},
+				),
+			/--owner\[0\] must be a 20-byte hex string/,
+		);
+		assert.throws(
+			() =>
+				parseBenchmarkArgs(
+					[
+						"--rpc-url",
+						"https://example.invalid/rpc",
+						"--mode",
+						"raw",
+						"--from",
+						"0x1234",
+					],
+					{},
+				),
+			/--from must be a 20-byte hex string/,
+		);
+	});
+
 	await t.test("rejects non-numeric numeric CLI options locally", () => {
 		assert.throws(
 			() =>
@@ -164,52 +214,24 @@ test("benchmark limit helpers", async (t) => {
 		);
 	});
 
-	await t.test("cycles token and owner inputs deterministically", () => {
-		const tokens = [tokenA, tokenB] as readonly Hex[];
-		const owners = [ownerA, ownerB] as readonly Hex[];
-		const calls = buildBalanceCalls(5, tokens, owners);
-
-		assert.deepEqual(
-			calls.map((call) => [call.to, call.data]),
-			[
-				[tokenA, encodeBalanceOfCalldata(ownerA)],
-				[tokenB, encodeBalanceOfCalldata(ownerA)],
-				[tokenA, encodeBalanceOfCalldata(ownerB)],
-				[tokenB, encodeBalanceOfCalldata(ownerB)],
-				[tokenA, encodeBalanceOfCalldata(ownerA)],
-			],
-		);
+	await t.test("createRawInitcodeSizeProbe produces exact byte length", () => {
+		const probe = createRawInitcodeSizeProbe(10);
+		assert.equal((probe.length - 2) / 2, 10);
 	});
 
-	await t.test("builds balance calls with expected byte math", () => {
-		const calls = buildBalanceCalls(2, [tokenA], [ownerA]);
+	await t.test(
+		"createRawRuntimeReturnProbe uses the correct PUSH opcode",
+		() => {
+			assert.equal(createRawRuntimeReturnProbe(1), "0x60016000f3");
+			assert.equal(createRawRuntimeReturnProbe(256), "0x6101006000f3");
+		},
+	);
 
-		assert.equal(balanceInputBytesPerCall, 58);
-		assert.equal(balanceReturnedBytesPerCall, 34);
-		assert.equal(calls.length, 2);
-		assert.deepEqual(calls[0], {
-			to: tokenA,
-			data: encodeBalanceOfCalldata(ownerA),
-		});
-		assert.deepEqual(calls[1], {
-			to: tokenA,
-			data: encodeBalanceOfCalldata(ownerA),
-		});
-	});
-
-	await t.test("generates exact-size raw initcode probes", () => {
-		assert.equal(createRawInitcodeSizeProbe(5), "0x60006000f3");
-		assert.equal(createRawInitcodeSizeProbe(8), "0x60006000f3000000");
+	await t.test("rejects non-address owners in balanceOf calldata", () => {
 		assert.throws(
-			() => createRawInitcodeSizeProbe(4),
-			/createRawInitcodeSizeProbe sizeBytes must be an integer >= 5/,
+			() => encodeBalanceOfCalldata("0x1234" as Hex),
+			/owner must be a 20-byte hex string/,
 		);
-	});
-
-	await t.test("generates raw runtime return probes", () => {
-		assert.equal(createRawRuntimeReturnProbe(0), "0x60006000f3");
-		assert.equal(createRawRuntimeReturnProbe(1), "0x60016000f3");
-		assert.equal(createRawRuntimeReturnProbe(24_576), "0x6160006000f3");
 	});
 
 	await t.test(
@@ -366,7 +388,7 @@ test("benchmark limit helpers", async (t) => {
 		},
 	);
 
-	await t.test("propagates invalid balance input errors", async () => {
+	await t.test("rejects invalid benchmark inputs before any RPC", async () => {
 		const originalFetch = globalThis.fetch;
 		const methods: string[] = [];
 
@@ -393,8 +415,8 @@ test("benchmark limit helpers", async (t) => {
 				runBenchmark({
 					rpcUrl: "https://example.invalid/rpc",
 					mode: "balances",
-					tokens: ["0x1234" as Hex],
-					owners: [ownerA],
+					tokens: [tokenA],
+					owners: ["0x1234" as Hex],
 					blockTag: "latest",
 					from: ownerA,
 					timeoutMs: 30_000,
@@ -403,9 +425,9 @@ test("benchmark limit helpers", async (t) => {
 					maxRuntimeBytes: 1,
 					json: false,
 				}),
-				/calls\[0\]\.to must be a 20-byte hex string/,
+				/config\.owners\[0\] must be a 20-byte hex string/,
 			);
-			assert.deepEqual(methods, ["eth_chainId", "eth_blockNumber"]);
+			assert.deepEqual(methods, []);
 		} finally {
 			globalThis.fetch = originalFetch;
 		}

@@ -9,6 +9,16 @@ import { ghostcallInitcode } from "./generated/initcode.ts";
 type Hex = `0x${string}`;
 
 /**
+ * Hex-encoded RPC quantity prefixed with `0x`.
+ */
+type HexQuantity = `0x${string}`;
+
+/**
+ * Block reference accepted by the outer `eth_call`.
+ */
+type GhostcallBlockReference = string | number | bigint;
+
+/**
  * One Ghostcall subcall entry.
  */
 type GhostcallCall = {
@@ -40,43 +50,50 @@ type GhostcallAggregateCall = GhostcallCall & {
 	 * a call does not explicitly opt into failure.
 	 */
 	allowFailure?: boolean;
+};
 
+/**
+ * One Ghostcall subcall entry for decoded aggregate results.
+ */
+type GhostcallDecodedCall<TResult = unknown> = GhostcallCall & {
 	/**
-	 * Optional decoder for this call's successful return data.
+	 * Decodes this call's successful return data.
 	 *
 	 * This is intentionally a caller-provided function so the SDK stays independent
 	 * from ABI libraries while still letting callers plug in helpers such as
 	 * `decodeFunctionResult` from viem or ox.
 	 */
-	decodeResult?: GhostcallResultDecoder<unknown>;
-};
-
-/**
- * One Ghostcall aggregate subcall entry for decoded-results mode.
- */
-type GhostcallDecodedAggregateCall<TResult = unknown> = GhostcallCall & {
-	/**
-	 * Decodes this call's successful return data.
-	 */
 	decodeResult: GhostcallResultDecoder<TResult>;
-
-	/**
-	 * Decoded-results mode is strict and does not return failed entries.
-	 */
-	allowFailure?: false;
 };
 
 /**
- * One decoded Ghostcall result entry.
+ * One successful Ghostcall result entry.
  */
-type GhostcallResult = {
+type GhostcallSuccessResult = {
+	/**
+	 * Indicates whether the underlying EVM `CALL` returned successfully.
+	 *
+	 * A `true` value means the target call returned successfully.
+	 */
+	success: true;
+
+	/**
+	 * Raw return data produced by the target call.
+	 */
+	returnData: Hex;
+};
+
+/**
+ * One failed Ghostcall result entry.
+ */
+type GhostcallFailedResult = {
 	/**
 	 * Indicates whether the underlying EVM `CALL` returned successfully.
 	 *
 	 * A `false` value means the target call reverted or otherwise failed, but the
 	 * Ghostcall batch itself still completed successfully.
 	 */
-	success: boolean;
+	success: false;
 
 	/**
 	 * Raw return data produced by the target call.
@@ -88,41 +105,43 @@ type GhostcallResult = {
 };
 
 /**
+ * One decoded Ghostcall result entry.
+ */
+type GhostcallResult = GhostcallSuccessResult | GhostcallFailedResult;
+
+/**
  * Function used by {@link aggregateCalls} to turn raw successful return data into
  * a caller-chosen value.
  */
 type GhostcallResultDecoder<TResult> = (
 	returnData: Hex,
-	entry: GhostcallResult,
+	entry: GhostcallSuccessResult,
 	index: number,
 ) => TResult;
 
 /**
- * One decoded aggregate result entry when a call provides `decodeResult`.
+ * Error thrown when a strict Ghostcall batch encounters a failed subcall.
  */
-type GhostcallDecodedResult<TResult> = {
-	success: true;
-	returnData: Hex;
-	decodedResult: TResult;
-};
+class GhostcallSubcallError extends Error {
+	readonly index: number;
+	readonly call: GhostcallAggregateCall;
+	readonly result: GhostcallFailedResult;
 
-type GhostcallAggregateResult<TCall> = TCall extends {
-	decodeResult: GhostcallResultDecoder<infer TResult>;
+	constructor(
+		index: number,
+		call: GhostcallAggregateCall,
+		result: GhostcallFailedResult,
+	) {
+		super(`Ghostcall subcall ${index} failed`);
+		this.name = "GhostcallSubcallError";
+		this.index = index;
+		this.call = call;
+		this.result = result;
+		Object.setPrototypeOf(this, new.target.prototype);
+	}
 }
-	? TCall extends { allowFailure: true }
-		? GhostcallDecodedResult<TResult> | GhostcallResult
-		: GhostcallDecodedResult<TResult>
-	: GhostcallResult;
 
-type GhostcallAggregateResults<
-	TCalls extends readonly GhostcallAggregateCall[],
-> = {
-	-readonly [Index in keyof TCalls]: GhostcallAggregateResult<TCalls[Index]>;
-};
-
-type GhostcallDecodedResults<
-	TCalls extends readonly GhostcallDecodedAggregateCall[],
-> = {
+type GhostcallDecodedResults<TCalls extends readonly GhostcallDecodedCall[]> = {
 	-readonly [Index in keyof TCalls]: TCalls[Index] extends {
 		decodeResult: GhostcallResultDecoder<infer TResult>;
 	}
@@ -130,30 +149,42 @@ type GhostcallDecodedResults<
 		: never;
 };
 
-type GhostcallAggregateOptions = {
+type GhostcallEncodeOptions = {
 	/**
-	 * Result shape returned by {@link aggregateCalls}.
+	 * Maximum allowed CREATE initcode size in bytes.
 	 *
-	 * Defaults to `entries`, returning Ghostcall result entries. Set to `decoded`
-	 * to return each call's decoded value directly.
+	 * Defaults to Ethereum's EIP-3860 limit of `49,152` bytes.
 	 */
-	results?: "entries";
+	maxInitcodeBytes?: number;
 };
 
-type GhostcallDecodedAggregateOptions = {
+type GhostcallEthCallOptions = {
 	/**
-	 * Return each call's decoded value directly.
+	 * Optional `from` address for the outer `eth_call`.
 	 */
-	results: "decoded";
+	from?: Hex;
+
+	/**
+	 * Optional gas limit for the outer `eth_call`.
+	 */
+	gas?: HexQuantity;
+
+	/**
+	 * Optional block tag, hex quantity, or block number for the outer `eth_call`.
+	 *
+	 * Decimal strings, numbers, and bigints are normalized to hex quantities.
+	 * Defaults to `latest`.
+	 */
+	blockTag?: GhostcallBlockReference;
 };
 
-type GhostcallAggregateImplementationResults<
-	TCalls extends readonly GhostcallAggregateCall[],
-> =
-	| GhostcallAggregateResults<TCalls>
-	| (TCalls extends readonly GhostcallDecodedAggregateCall[]
-			? GhostcallDecodedResults<TCalls>
-			: never);
+type GhostcallAggregateOptions = GhostcallEncodeOptions & {
+	/**
+	 * Optional outer `eth_call` controls shared by {@link aggregateCalls} and
+	 * {@link aggregateDecodedCalls}.
+	 */
+	ethCall?: GhostcallEthCallOptions;
+};
 
 /**
  * Minimal EIP-1193 provider shape used by the SDK.
@@ -166,7 +197,7 @@ const addressHexLength = 40;
 const encodedHeaderHexLength = 4;
 const maxCalldataSize = 0xffff;
 const encodedCallHeaderSize = 0x16;
-const maxCreateInitcodeSize = 0xc000;
+const defaultMaxCreateInitcodeSize = 0xc000;
 const successFlagMask = 0x8000;
 const returnDataLengthMask = 0x7fff;
 const bundledInitcodeSize = byteLength(ghostcallInitcode);
@@ -182,6 +213,7 @@ const bundledInitcodeSize = byteLength(ghostcallInitcode);
  *
  * @param calls - Ordered list of subcalls to execute. Each entry becomes one
  *                Ghostcall payload segment in the same order it appears here.
+ * @param options - Optional encoding controls.
  *
  * @returns Full CREATE payload consisting of the bundled Ghostcall initcode plus
  *          the encoded call list.
@@ -189,16 +221,18 @@ const bundledInitcodeSize = byteLength(ghostcallInitcode);
  * @throws {TypeError} If any call address or calldata value is not valid hex.
  * @throws {RangeError} If any call data exceeds the protocol `uint16` length limit
  *                      or if the full encoded CREATE payload would exceed the
- *                      EVM initcode size limit.
+ *                      configured initcode size limit.
  *
  * @example
  * const data = encodeCalls([
  *   {
- *     to: "0x1111111111111111111111111111111111111111",
- *     data: "0x70a08231000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+ *     // USDC on Ethereum mainnet: balanceOf(Binance 14)
+ *     to: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+ *     data: "0x70a0823100000000000000000000000028c6c06298d514db089934071355e5743bf21d60",
  *   },
  *   {
- *     to: "0x2222222222222222222222222222222222222222",
+ *     // WETH9 on Ethereum mainnet: totalSupply()
+ *     to: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
  *     data: "0x18160ddd",
  *   },
  * ]);
@@ -206,9 +240,19 @@ const bundledInitcodeSize = byteLength(ghostcallInitcode);
  * // Later:
  * // provider.request({ method: "eth_call", params: [{ data }, "latest"] })
  */
-function encodeCalls(calls: readonly GhostcallCall[]): Hex {
+function encodeCalls(
+	calls: readonly GhostcallCall[],
+	options: GhostcallEncodeOptions = {},
+): Hex {
 	const encodedParts = [ghostcallInitcode.slice(2)];
+	const maxInitcodeBytes = resolveMaxInitcodeBytes(options.maxInitcodeBytes);
 	let totalEncodedSize = bundledInitcodeSize;
+
+	if (totalEncodedSize > maxInitcodeBytes) {
+		throw new RangeError(
+			`encoded Ghostcall initcode exceeds the ${maxInitcodeBytes}-byte CREATE initcode limit`,
+		);
+	}
 
 	for (const [index, call] of calls.entries()) {
 		assertAddress(call.to, `calls[${index}].to`);
@@ -222,9 +266,9 @@ function encodeCalls(calls: readonly GhostcallCall[]): Hex {
 		}
 
 		totalEncodedSize += encodedCallHeaderSize + calldataSize;
-		if (totalEncodedSize > maxCreateInitcodeSize) {
+		if (totalEncodedSize > maxInitcodeBytes) {
 			throw new RangeError(
-				`encoded Ghostcall initcode exceeds the ${maxCreateInitcodeSize}-byte CREATE initcode limit`,
+				`encoded Ghostcall initcode exceeds the ${maxInitcodeBytes}-byte CREATE initcode limit`,
 			);
 		}
 
@@ -241,104 +285,70 @@ function encodeCalls(calls: readonly GhostcallCall[]): Hex {
  *
  * This is the provider-facing counterpart to {@link encodeCalls} and
  * {@link decodeResults}. It sends the bundled Ghostcall initcode as the `data`
- * field of `eth_call` without a `to` address, then returns decoded result entries
+ * field of `eth_call` without a `to` address, then returns raw result entries
  * in the same order as the input calls.
  *
  * By default, any failed subcall makes this method reject. Set
  * `allowFailure: true` on a call to receive that failed entry in the returned
- * results instead. Set `decodeResult` on a call to transform successful raw
- * return data, for example with `decodeFunctionResult` from an ABI library.
- * Pass `{ results: "decoded" }` as the third argument to receive only the
- * decoded values.
+ * results instead. Use {@link aggregateDecodedCalls} when you want a strict batch
+ * that returns decoded values directly. Use `options.ethCall` to forward `from`,
+ * `gas`, or `blockTag` to the outer `eth_call`.
  *
  * @param provider - EIP-1193-compatible provider with a `request` method.
  * @param calls - Ordered list of subcalls to execute.
- * @param options - Optional result-shape controls.
+ * @param options - Optional outer call and initcode controls.
  *
- * @returns Ordered decoded Ghostcall result entries.
+ * @returns Ordered Ghostcall result entries.
  *
  * @throws {TypeError} If inputs are not valid Ghostcall call entries or if the
  *                     provider returns a non-hex `eth_call` result.
- * @throws {RangeError} If the encoded CREATE payload exceeds protocol or EVM
- *                      size limits.
- * @throws {Error} If a subcall fails without `allowFailure: true`, or if the
- *                 response entry count does not match the request entry count.
+ * @throws {RangeError} If the encoded CREATE payload exceeds protocol or the
+ *                      configured CREATE initcode ceiling.
+ * @throws {GhostcallSubcallError} If a subcall fails without `allowFailure: true`.
+ * @throws {Error} If the response entry count does not match the request entry count.
  *
  * @example
  * const results = await aggregateCalls(provider, [
  *   {
- *     to: "0x1111111111111111111111111111111111111111",
- *     data: "0x70a08231000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
- *     decodeResult: (returnData) => decodeFunctionResult({
- *       abi: erc20Abi,
- *       functionName: "balanceOf",
- *       data: returnData,
- *     }),
+ *     // USDC on Ethereum mainnet: balanceOf(Binance 14)
+ *     to: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+ *     data: "0x70a0823100000000000000000000000028c6c06298d514db089934071355e5743bf21d60",
  *   },
  *   {
- *     to: "0x2222222222222222222222222222222222222222",
+ *     // WETH9 on Ethereum mainnet: totalSupply()
+ *     to: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
  *     data: "0x18160ddd",
- *     allowFailure: true,
  *   },
  * ]);
- *
- * const [balance] = await aggregateCalls(provider, [
- *   {
- *     to: "0x1111111111111111111111111111111111111111",
- *     data: "0x70a08231000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
- *     decodeResult: (returnData) => decodeFunctionResult({
- *       abi: erc20Abi,
- *       functionName: "balanceOf",
- *       data: returnData,
- *     }),
- *   },
- * ], { results: "decoded" });
  */
-async function aggregateCalls<
-	const TCalls extends readonly GhostcallAggregateCall[],
->(
+async function aggregateCalls(
 	provider: EIP1193ProviderWithRequestFn,
-	calls: TCalls,
+	calls: readonly GhostcallAggregateCall[],
 	options?: GhostcallAggregateOptions,
-): Promise<GhostcallAggregateResults<TCalls>>;
-async function aggregateCalls<
-	const TCalls extends readonly GhostcallDecodedAggregateCall[],
->(
-	provider: EIP1193ProviderWithRequestFn,
-	calls: TCalls,
-	options: GhostcallDecodedAggregateOptions,
-): Promise<GhostcallDecodedResults<TCalls>>;
-async function aggregateCalls<
-	const TCalls extends readonly GhostcallAggregateCall[],
->(
-	provider: EIP1193ProviderWithRequestFn,
-	calls: TCalls,
-	options: GhostcallAggregateOptions | GhostcallDecodedAggregateOptions = {},
-): Promise<GhostcallAggregateImplementationResults<TCalls>> {
-	let decodedCalls: readonly GhostcallDecodedAggregateCall[] | undefined;
+): Promise<GhostcallResult[]> {
+	const resolvedOptions = options ?? {};
+	const data = encodeCalls(calls, resolvedOptions);
+	const ethCall = { data } as { data: Hex; from?: Hex; gas?: HexQuantity };
+	const blockTag = normalizeBlockTag(
+		resolvedOptions.ethCall?.blockTag ?? "latest",
+		"options.ethCall.blockTag",
+	);
 
-	if (options.results === "decoded") {
-		for (const [index, call] of calls.entries()) {
-			if (call.allowFailure === true) {
-				throw new TypeError(
-					`calls[${index}].allowFailure cannot be true when results is decoded`,
-				);
-			}
-
-			if (call.decodeResult === undefined) {
-				throw new TypeError(
-					`calls[${index}].decodeResult is required when results is decoded`,
-				);
-			}
-		}
-
-		decodedCalls = calls as readonly GhostcallDecodedAggregateCall[];
+	if (resolvedOptions.ethCall?.from !== undefined) {
+		assertAddress(resolvedOptions.ethCall.from, "options.ethCall.from");
+		ethCall.from = resolvedOptions.ethCall.from;
 	}
 
-	const data = encodeCalls(calls);
+	if (resolvedOptions.ethCall?.gas !== undefined) {
+		ethCall.gas = assertHexQuantity(
+			resolvedOptions.ethCall.gas,
+			"options.ethCall.gas",
+		);
+	}
+
 	const result = await provider.request({
 		method: "eth_call",
-		params: [{ data }, "latest"],
+		params: [ethCall, blockTag],
 	});
 	const entries = decodeResults(assertHex(result, "eth_call result"));
 
@@ -349,36 +359,75 @@ async function aggregateCalls<
 	}
 
 	for (const [index, entry] of entries.entries()) {
-		if (!entry.success && calls[index]?.allowFailure !== true) {
-			throw new Error(`Ghostcall subcall ${index} failed`);
+		const call = calls[index] as GhostcallAggregateCall;
+		if (!entry.success && call.allowFailure !== true) {
+			throw new GhostcallSubcallError(index, call, entry);
 		}
 	}
 
-	if (decodedCalls !== undefined) {
-		return entries.map((entry, index) => {
-			const call = decodedCalls[index];
-			if (call === undefined) {
-				throw new Error("Ghostcall decoded call invariant failed");
-			}
+	return entries;
+}
 
-			return call.decodeResult(entry.returnData, entry, index);
-		}) as GhostcallAggregateImplementationResults<TCalls>;
-	}
+/**
+ * Sends a strict Ghostcall batch and decodes each successful result entry.
+ *
+ * This is the decoded counterpart to {@link aggregateCalls}. It sends the bundled
+ * Ghostcall initcode as the `data` field of `eth_call` without a `to` address,
+ * then runs each call's `decodeResult` callback over the successful return data in
+ * the same order as the input calls.
+ *
+ * `aggregateDecodedCalls` is always strict. Its TypeScript input shape requires a
+ * `decodeResult` callback on every call and does not accept `allowFailure`.
+ * Any failed subcall rejects with {@link GhostcallSubcallError}. Use
+ * {@link aggregateCalls} if you need raw failed entries. Use `options.ethCall`
+ * to forward `from`, `gas`, or `blockTag` to the outer `eth_call`.
+ *
+ * @param provider - EIP-1193-compatible provider with a `request` method.
+ * @param calls - Ordered list of strict decoded subcalls to execute.
+ * @param options - Optional outer call and initcode controls.
+ *
+ * @returns Ordered list of decoded values.
+ *
+ * @throws {TypeError} If inputs are not valid Ghostcall call entries or if the
+ *                     provider returns a non-hex `eth_call` result.
+ * @throws {RangeError} If the encoded CREATE payload exceeds protocol or the
+ *                      configured CREATE initcode ceiling.
+ * @throws {GhostcallSubcallError} If any subcall fails.
+ * @throws {Error} If the response entry count does not match the request entry count.
+ *
+ * @example
+ * const erc20Abi = parseAbi([
+ *   "function balanceOf(address account) view returns (uint256)",
+ * ]);
+ * const usdc = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+ * const owner = "0x28C6c06298d514Db089934071355E5743bf21d60";
+ *
+ * const [balance] = await aggregateDecodedCalls(provider, [
+ *   {
+ *     to: usdc,
+ *     data: "0x70a0823100000000000000000000000028c6c06298d514db089934071355e5743bf21d60",
+ *     decodeResult: (returnData) => decodeFunctionResult({
+ *       abi: erc20Abi,
+ *       functionName: "balanceOf",
+ *       data: returnData,
+ *     }),
+ *   },
+ * ]);
+ */
+async function aggregateDecodedCalls<
+	const TCalls extends readonly GhostcallDecodedCall<unknown>[],
+>(
+	provider: EIP1193ProviderWithRequestFn,
+	calls: TCalls,
+	options?: GhostcallAggregateOptions,
+): Promise<GhostcallDecodedResults<TCalls>> {
+	const entries = await aggregateCalls(provider, calls, options);
 
-	const decodedEntries = entries.map((entry, index) => {
-		const decodeResult = calls[index]?.decodeResult;
-		if (!entry.success || decodeResult === undefined) {
-			return entry;
-		}
-
-		return {
-			...entry,
-			success: true,
-			decodedResult: decodeResult(entry.returnData, entry, index),
-		};
-	});
-
-	return decodedEntries as GhostcallAggregateImplementationResults<TCalls>;
+	return entries.map((entry, index) => {
+		const call = calls[index] as TCalls[number];
+		const successEntry = entry as GhostcallSuccessResult;
+		return call.decodeResult(successEntry.returnData, successEntry, index);
+	}) as GhostcallDecodedResults<TCalls>;
 }
 
 /**
@@ -500,6 +549,105 @@ function assertHex(value: unknown, label: string): Hex {
 }
 
 /**
+ * Validates that a value is an RPC hex quantity.
+ *
+ * @param value - Unknown input to validate.
+ * @param label - Field name used in thrown error messages.
+ * @returns The validated value narrowed to {@link HexQuantity}.
+ * @throws {TypeError} If the value is not a valid `0x`-prefixed quantity.
+ *
+ * @internal
+ */
+function assertHexQuantity(value: unknown, label: string): HexQuantity {
+	if (typeof value !== "string") {
+		throw new TypeError(`${label} must be a hex quantity string`);
+	}
+
+	if (!/^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/.test(value)) {
+		throw new TypeError(`${label} must be a 0x-prefixed hex quantity`);
+	}
+
+	return value as HexQuantity;
+}
+
+/**
+ * Normalizes a block reference into the RPC shape expected by `eth_call`.
+ *
+ * @param value - Block reference to normalize.
+ * @param label - Field name used in thrown error messages.
+ * @returns Normalized block reference.
+ * @throws {TypeError} If the value is not a supported block reference.
+ *
+ * @internal
+ */
+function normalizeBlockTag(value: unknown, label: string): string {
+	if (typeof value === "number") {
+		if (!Number.isSafeInteger(value) || value < 0) {
+			throw new TypeError(
+				`${label} must be a non-negative safe integer, bigint, or non-empty string`,
+			);
+		}
+
+		return `0x${value.toString(16)}`;
+	}
+
+	if (typeof value === "bigint") {
+		if (value < 0n) {
+			throw new TypeError(
+				`${label} must be a non-negative safe integer, bigint, or non-empty string`,
+			);
+		}
+
+		return `0x${value.toString(16)}`;
+	}
+
+	if (typeof value !== "string" || value.length === 0) {
+		throw new TypeError(
+			`${label} must be a non-negative safe integer, bigint, or non-empty string`,
+		);
+	}
+
+	if (/^-?[0-9]+$/.test(value)) {
+		if (value.startsWith("-")) {
+			throw new TypeError(
+				`${label} must be a non-negative safe integer, bigint, or non-empty string`,
+			);
+		}
+
+		return `0x${BigInt(value).toString(16)}`;
+	}
+
+	if (value.startsWith("0x") || value.startsWith("0X")) {
+		return assertHexQuantity(`0x${value.slice(2)}`, label);
+	}
+
+	return value;
+}
+
+/**
+ * Resolves the active CREATE initcode ceiling.
+ *
+ * @param value - Optional caller override.
+ * @returns Active initcode ceiling in bytes.
+ * @throws {TypeError} If the override is not a non-negative safe integer.
+ *
+ * @internal
+ */
+function resolveMaxInitcodeBytes(value: number | undefined): number {
+	if (value === undefined) {
+		return defaultMaxCreateInitcodeSize;
+	}
+
+	if (!Number.isSafeInteger(value) || value < 0) {
+		throw new TypeError(
+			"options.maxInitcodeBytes must be a non-negative safe integer",
+		);
+	}
+
+	return value;
+}
+
+/**
  * Returns the byte length of a validated hex string.
  *
  * @param value - Validated hex string.
@@ -515,14 +663,23 @@ export type {
 	EIP1193ProviderWithRequestFn,
 	GhostcallAggregateCall,
 	GhostcallAggregateOptions,
-	GhostcallAggregateResult,
+	GhostcallBlockReference,
 	GhostcallCall,
-	GhostcallDecodedAggregateCall,
-	GhostcallDecodedAggregateOptions,
-	GhostcallDecodedResult,
+	GhostcallDecodedCall,
 	GhostcallDecodedResults,
+	GhostcallEncodeOptions,
+	GhostcallEthCallOptions,
+	GhostcallFailedResult,
 	GhostcallResult,
 	GhostcallResultDecoder,
+	GhostcallSuccessResult,
 	Hex,
+	HexQuantity,
 };
-export { aggregateCalls, decodeResults, encodeCalls };
+export {
+	aggregateCalls,
+	aggregateDecodedCalls,
+	decodeResults,
+	encodeCalls,
+	GhostcallSubcallError,
+};
