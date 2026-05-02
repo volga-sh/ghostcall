@@ -5,7 +5,7 @@ description: Send a ghostcall batch and return raw success or failure result ent
 
 Sends one CREATE-style `eth_call` and returns raw result entries in request order.
 
-Use this when you need `success` flags, revert data, or per-call `allowFailure`.
+Use this when you need `success` flags, revert data, or per-call `allowFailure`. The SDK builds the request through `encodeCalls()`, so input validation happens before the RPC request is sent.
 
 ## Usage
 

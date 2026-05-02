@@ -5,7 +5,7 @@ description: Encode ghostcall entries into the full CREATE-style eth_call payloa
 
 Builds the complete request `data` field for a CREATE-style `eth_call`.
 
-Use this when you want to own the RPC request yourself.
+Use this when you want to own the RPC request yourself. It is also the supported boundary for producing well-formed ghostcall payloads; callers who hand-build raw payload bytes must follow the wire format exactly.
 
 ## Usage
 
@@ -108,4 +108,5 @@ Pass the returned value as the `data` field of `eth_call` without a `to` address
 
 - An empty call list is valid and encodes just the bundled ghostcall initcode.
 - The input format has no count field. The Yul program advances through appended entries until it reaches the end of the initcode payload.
+- `encodeCalls()` performs the input validation that the optimized initcode intentionally does not duplicate.
 - Use [`decodeResults()`](/api/decode-results/) to parse the returned blob.

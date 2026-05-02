@@ -35,7 +35,7 @@ These root scripts proxy to the Starlight app in `docs/`. Source files live unde
 - `src/sdk/generated/initcode.ts` is generated and must not be hand-edited.
 - `scripts/generate-sdk-initcode.mjs` derives bundled initcode from the Foundry artifact.
 - `test/ghostcall.test.ts` covers real end-to-end protocol behavior against Anvil.
-- `test/sdk.test.ts` covers SDK encoding, decoding, validation, and failure policy.
+- `test/sdk.test.ts` covers SDK encoding, decoding, validation, failure policy, and the bundled initcode size budget.
 
 ## Change discipline
 

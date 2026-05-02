@@ -11,11 +11,12 @@ import {
 
 const maxCreateInitcodeSize = 0xc000;
 const encodedCallHeaderSize = 0x16;
+const optimizedBundledInitcodeSize = 91;
 
 test("Ghostcall SDK", async (t) => {
 	await t.test("supports empty call lists and custom initcode ceilings", () => {
 		const data = encodeCalls([]);
-		const bundledInitcodeSize = (data.length - 2) / 2;
+		const bundledInitcodeSize = byteLength(data);
 
 		assert.match(data, /^0x[0-9a-fA-F]+$/);
 		assert.notEqual(data, "0x");
@@ -23,6 +24,10 @@ test("Ghostcall SDK", async (t) => {
 			() => encodeCalls([], { maxInitcodeBytes: bundledInitcodeSize - 1 }),
 			RangeError,
 		);
+	});
+
+	await t.test("pins the bundled optimized initcode size", () => {
+		assert.equal(byteLength(encodeCalls([])), optimizedBundledInitcodeSize);
 	});
 
 	await t.test("encodes calldata at the uint16 limit", () => {
@@ -395,3 +400,7 @@ test("Ghostcall SDK", async (t) => {
 		},
 	);
 });
+
+function byteLength(value: `0x${string}`): number {
+	return (value.length - 2) / 2;
+}

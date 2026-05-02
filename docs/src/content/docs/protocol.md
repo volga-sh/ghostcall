@@ -38,9 +38,18 @@ The payload is a repeated list of call entries:
 N bytes calldata
 ```
 
-There is no separate count field. The program advances through the appended payload until it reaches the end of code.
+There is no separate count field. The program advances through the appended payload until its cursor reaches the end of code. SDK-generated payloads are validated before the RPC request is sent; raw hand-built payloads must follow the wire format exactly. Malformed raw payload behavior is unspecified.
 
-The length comes first so the Yul program can copy the 22-byte fixed header into scratch memory at offset `0x0a`. One `mload(0x00)` then exposes both the length and target address word in a shape that maps cleanly to `CALL`.
+The length comes first so the Yul program can copy the 22-byte fixed header to the current memory write pointer. One `mload` exposes the length in the high two bytes and the target shifted above the trailing scratch bytes.
+
+## Implementation notes
+
+The bundled initcode is optimized for size, so it keeps only the checks that cannot be moved to the SDK boundary.
+
+- The output buffer starts at memory offset `0x00`, avoiding a fixed return offset and final subtraction.
+- The current output write pointer is reused as scratch for the next input header before the result entry is finalized.
+- The initcode does not revalidate SDK-owned input invariants such as address shape, hex shape, calldata length encoding, or truncated raw payloads.
+- The per-entry returndata length check stays in Yul because returndata size is only known after `CALL` returns.
 
 ## Output payload
 
@@ -62,12 +71,10 @@ Subcall failures are returned inline with `success = 0` and the revert data, if 
 
 ## Top-level reverts
 
-Ghostcall intentionally fails closed for malformed protocol input and per-entry return-size overflow. These top-level reverts are empty.
+Ghostcall intentionally fails closed for per-entry return-size overflow. These top-level reverts are empty.
 
 Expected top-level failure cases include:
 
-- A payload ending in a truncated call header.
-- A call entry whose declared calldata length extends past the end of the appended payload.
 - A subcall returning more bytes than the packed result entry can represent.
 
 Higher-level batch failure policy is SDK behavior, not Yul protocol behavior.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Abi, AbiError, AbiFunction, Hex } from "ox";
+import { Abi, AbiError, AbiFunction, type Hex } from "ox";
 import {
 	aggregateCalls,
 	aggregateDecodedCalls,
@@ -190,6 +190,44 @@ test("Ghostcall integration", async (t) => {
 	});
 
 	await t.test(
+		"packs unaligned result entries after staging calldata",
+		async () => {
+			await sendFunctionTransaction(anvil.transport, mockAddress, reset, []);
+
+			const firstCall = `0x${"aa".repeat(40)}` as Hex.Hex;
+			const secondCall = `0x${"bb".repeat(7)}` as Hex.Hex;
+			const firstReturn = "0xaa" as Hex.Hex;
+			const secondReturn = "0xbbccdd" as Hex.Hex;
+
+			await sendFunctionTransaction(
+				anvil.transport,
+				mockAddress,
+				givenCalldataReturn,
+				[firstCall, firstReturn],
+			);
+			await sendFunctionTransaction(
+				anvil.transport,
+				mockAddress,
+				givenCalldataReturn,
+				[secondCall, secondReturn],
+			);
+
+			const [firstEntry, secondEntry] = await aggregateCalls(anvil.transport, [
+				{ to: mockAddress, data: firstCall },
+				{ to: mockAddress, data: secondCall },
+			]);
+
+			assert.ok(firstEntry);
+			assert.equal(firstEntry.success, true);
+			assert.equal(firstEntry.returnData, firstReturn);
+
+			assert.ok(secondEntry);
+			assert.equal(secondEntry.success, true);
+			assert.equal(secondEntry.returnData, secondReturn);
+		},
+	);
+
+	await t.test(
 		"uses CALL semantics so same-batch state changes are visible to later calls",
 		async () => {
 			await sendFunctionTransaction(anvil.transport, mockAddress, reset, []);
@@ -240,17 +278,6 @@ test("Ghostcall integration", async (t) => {
 		assert.ok(entry);
 		assert.equal(entry.success, true);
 		assert.equal(entry.returnData, maxSizedResponse);
-	});
-
-	await t.test("reverts on malformed trailing bytes", async () => {
-		const response = await ethCallCreateRaw(
-			anvil.transport,
-			Hex.concat(encodeCalls([]), "0x00"),
-		);
-		const error = getRpcError(response);
-		const revertData = getRevertData(error);
-
-		assert.equal(revertData, "0x");
 	});
 });
 

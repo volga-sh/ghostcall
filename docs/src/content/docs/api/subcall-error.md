@@ -85,5 +85,5 @@ The raw failed result entry. `returnData` contains revert data when the target c
 ## Notes
 
 - `GhostcallSubcallError` means the SDK rejected due to failure policy.
-- Top-level RPC failures, malformed payload failures, and provider errors are separate from this error.
+- Top-level RPC failures, per-entry return-size overflow, and provider errors are separate from this error.
 - Use `allowFailure: true` with `aggregateCalls()` when you want failed entries returned instead of thrown.

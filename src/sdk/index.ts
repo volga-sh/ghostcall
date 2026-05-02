@@ -153,6 +153,9 @@ type GhostcallEncodeOptions = {
 	/**
 	 * Maximum allowed CREATE initcode size in bytes.
 	 *
+	 * This applies to the full request `data`, including bundled Ghostcall
+	 * initcode and every encoded subcall entry.
+	 *
 	 * Defaults to Ethereum's EIP-3860 limit of `49,152` bytes.
 	 */
 	maxInitcodeBytes?: number;
@@ -210,6 +213,8 @@ const bundledInitcodeSize = byteLength(ghostcallInitcode);
  * by the compact binary payload for each subcall, so callers can pass it directly
  * as the `data` field of an `eth_call` request without supplying a `to` address.
  * Each encoded subcall entry uses the compact layout `[len(2)][target(20)][data]`.
+ * The bundled initcode assumes appended bytes follow this exact shape; this
+ * function is the supported boundary for producing well-formed Ghostcall payloads.
  *
  * @param calls - Ordered list of subcalls to execute. Each entry becomes one
  *                Ghostcall payload segment in the same order it appears here.
@@ -286,7 +291,9 @@ function encodeCalls(
  * This is the provider-facing counterpart to {@link encodeCalls} and
  * {@link decodeResults}. It sends the bundled Ghostcall initcode as the `data`
  * field of `eth_call` without a `to` address, then returns raw result entries
- * in the same order as the input calls.
+ * in the same order as the input calls. Request bytes are built through
+ * {@link encodeCalls}, so SDK callers get the supported payload validation before
+ * the RPC request is sent.
  *
  * By default, any failed subcall makes this method reject. Set
  * `allowFailure: true` on a call to receive that failed entry in the returned

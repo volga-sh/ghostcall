@@ -5,7 +5,7 @@ description: Send a strict ghostcall batch and decode each successful result ent
 
 Sends one CREATE-style `eth_call` and returns decoded values in the same order as the input calls.
 
-Use this for the common app path: every subcall is expected to succeed, and each call provides a `decodeResult` callback.
+Use this for the common app path: every subcall is expected to succeed, and each call provides a `decodeResult` callback. The SDK builds the request through `encodeCalls()`, so input validation happens before the RPC request is sent.
 
 ## Usage
 

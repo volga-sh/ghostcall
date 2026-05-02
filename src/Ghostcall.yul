@@ -42,8 +42,9 @@ object "Ghostcall" {
         // - append (success, returndata) to the response buffer
         // - continue until the payload is fully consumed
         //
-        // The SDK is expected to validate most caller-facing invariants ahead of time. The checks
-        // left in this file exist only to protect parser correctness and response packing.
+        // The SDK is expected to validate caller-facing input invariants ahead of time. The only
+        // top-level check left here protects response packing, because returndata size is learned
+        // from the EVM after each CALL.
 
         // dataoffset("user_payload_anchor") is the byte offset of the empty data section declared at
         // the bottom of this file. Because that data section is placed after the code, its offset is
@@ -52,51 +53,34 @@ object "Ghostcall" {
         let payloadCursor := dataoffset("user_payload_anchor")
 
         // Memory layout used by this program:
-        // - 0x00..0x1f: scratch space for reading the current entry header
-        // - 0x20..... : output buffer that will become the eth_call return value
+        // - 0x00..writePtr: finalized output buffer that will become the eth_call return value
+        // - writePtr..writePtr+0x1f: scratch space for reading the current entry header
         //
-        // writePtr always points to "where the next result entry should be written".
-        let writePtr := 0x20
+        // writePtr always points to where the next result entry starts. The entry's memory is
+        // scratch until CALL completes, then the packed result overwrites that same region.
+        let writePtr := 0x00
 
-        // Infinite loop with an explicit break once all payload bytes are consumed.
-        for {} 1 {} {
-            if eq(payloadCursor, codesize()) {
-                break
-            }
-
-            // Read the 22-byte fixed-size entry header into scratch memory starting at 0x0a rather
-            // than 0x00.
+        // Process entries until the cursor reaches the end of the CREATE payload. SDK-generated
+        // payloads always land exactly on codesize(); raw malformed trailing bytes are outside the
+        // supported boundary and are not checked here.
+        for {} lt(payloadCursor, codesize()) {} {
+            // Read the 22-byte fixed-size entry header into scratch memory at writePtr.
             //
-            // Why 0x0a?
-            // - the header layout is [len(2)][target(20)]
-            // - placing the first header byte at memory offset 10 makes the 20-byte target end
-            //   exactly at byte 31 of the 32-byte word loaded from mload(0x00)
-            // - that means one mload gives us:
-            //     [10 zero bytes][2-byte len][20-byte target]
-            // - so shr(160, headerWord) yields calldata length
-            // - and headerWord itself already has the target in the low 20 bytes for CALL
-            //
-            // CODECOPY pads with zeros if it reads past the end of code. That is why we still need
-            // an explicit bounds check later: without it, a truncated entry would silently decode as
-            // zeros instead of failing.
-            codecopy(0x0a, payloadCursor, 0x16)
+            // The header layout is [len(2)][target(20)]. One mload gives us:
+            //   [2-byte len][20-byte target][10 trailing bytes]
+            codecopy(writePtr, payloadCursor, 0x16)
 
-            let headerWord := mload(0x00)
+            let headerWord := mload(writePtr)
 
-            // The high 2 non-zero bytes hold the big-endian uint16 calldata length.
-            let calldataSize := shr(160, headerWord)
-            let nextCursor := add(add(payloadCursor, 0x16), calldataSize)
+            // The high 2 bytes hold the big-endian uint16 calldata length. The target occupies the
+            // next 20 bytes, so shr(80, headerWord) yields the address for CALL.
+            let calldataSize := shr(240, headerWord)
 
-            // Reject truncated entries. This single check covers both:
-            // - not enough bytes for the 22-byte header
-            // - not enough bytes for the calldata that the header claims exists
-            if gt(nextCursor, codesize()) {
-                revert(0x00, 0x00)
-            }
-
-            // The next result entry will be written at writePtr. Its first 2 bytes are the packed
-            // header, so the calldata scratch area can safely start immediately after that header.
-            let calldataPtr := add(writePtr, 0x02)
+            // Put calldata after the 22-byte input header scratch. The returned entry later uses
+            // only writePtr..writePtr+0x01 for its packed header and writePtr+0x02 onward for
+            // returndata, so this staging area can be safely overwritten after CALL.
+            let calldataPtr := add(writePtr, 0x16)
+            let returndataPtr := add(writePtr, 0x02)
 
             // Copy just this call's calldata into memory so CALL can read it.
             codecopy(calldataPtr, add(payloadCursor, 0x16), calldataSize)
@@ -107,20 +91,14 @@ object "Ghostcall" {
             // - calldata in memory at calldataPtr
             // - no output buffer yet, because we do not know returndata size in advance
             //
-            // CALL only cares about the low 20 bytes of its address argument, so headerWord can be
-            // passed directly: the target is already sitting there after the 0x0a codecopy trick.
-            let success := call(gas(), headerWord, 0, calldataPtr, calldataSize, 0, 0)
+            let success := call(gas(), shr(80, headerWord), 0, calldataPtr, calldataSize, 0, 0)
             let returndataSize := returndatasize()
 
             // The packed result header has 15 returndata length bits; bit 15 is the success flag.
             // Revert rather than letting oversized returndata collide with the success bit.
-            if gt(returndataSize, 0x7fff) {
+            if shr(15, returndataSize) {
                 revert(0x00, 0x00)
             }
-
-            // Compute where the next result entry would begin after writing:
-            //   2-byte packed header + returndata bytes
-            let nextWritePtr := add(add(writePtr, 0x02), returndataSize)
 
             // Intentionally do not enforce an aggregate response-size cap here. CREATE-style
             // execution already treats returned bytes as would-be runtime code, so the active
@@ -135,17 +113,17 @@ object "Ghostcall" {
             mstore(writePtr, shl(240, or(shl(15, success), returndataSize)))
 
             // Append the raw returndata bytes immediately after the 2-byte header.
-            returndatacopy(add(writePtr, 0x02), 0, returndataSize)
+            returndatacopy(returndataPtr, 0, returndataSize)
 
             // Advance both cursors:
             // - writePtr moves to the start of the next result entry
             // - payloadCursor moves to the next input entry
-            writePtr := nextWritePtr
-            payloadCursor := nextCursor
+            writePtr := add(returndataPtr, returndataSize)
+            payloadCursor := add(payloadCursor, add(0x16, calldataSize))
         }
 
         // Return exactly the bytes that were written to the response buffer.
-        return(0x20, sub(writePtr, 0x20))
+        return(0x00, writePtr)
 
     }
 
