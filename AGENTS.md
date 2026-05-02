@@ -114,6 +114,7 @@ Tests in this repository are real execution tests, not abstract unit exercises.
 - Exported functions should have explicit return types.
 - Keep exports grouped at the end of hand-written TypeScript files instead of scattering `export` keywords through declarations. Generated files may follow their generator's output shape.
 - Use runtime validation at string and wire boundaries, where TypeScript cannot protect callers.
+- Do not add runtime checks for typed internal invariants that TypeScript already proves, such as required callbacks or disallowed fields within SDK-only control flow.
 - Avoid unnecessary assertions and wrappers; use them only when narrowing external input or bridging third-party type limitations.
 
 ### Generated Artifacts

@@ -109,8 +109,9 @@ revert data.
 The SDK has no ABI helpers and no runtime artifact reads. To ABI-decode successful entries, pass
 `decodeResult` callbacks to `aggregateDecodedCalls` and use the ABI library already used by the
 application. Use `options.ethCall` to set outer `eth_call` fields such as `from`, `gas`, and
-`blockTag`. `blockTag` accepts named tags such as `latest` or `safe`, canonical hex quantities,
-and decimal block numbers passed as strings, numbers, or bigints.
+`blockTag`. In TypeScript, `aggregateDecodedCalls` requires `decodeResult` on every call and does
+not accept `allowFailure`. `blockTag` accepts named tags such as `latest` or `safe`, canonical hex
+quantities, and decimal block numbers passed as strings, numbers, or bigints.
 
 ## Why this works
 

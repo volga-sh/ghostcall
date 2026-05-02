@@ -359,12 +359,8 @@ async function aggregateCalls(
 	}
 
 	for (const [index, entry] of entries.entries()) {
-		if (!entry.success && calls[index]?.allowFailure !== true) {
-			const call = calls[index];
-			if (call === undefined) {
-				throw new Error("Ghostcall strict-mode call invariant failed");
-			}
-
+		const call = calls[index] as GhostcallAggregateCall;
+		if (!entry.success && call.allowFailure !== true) {
 			throw new GhostcallSubcallError(index, call, entry);
 		}
 	}
@@ -380,11 +376,11 @@ async function aggregateCalls(
  * then runs each call's `decodeResult` callback over the successful return data in
  * the same order as the input calls.
  *
- * `aggregateDecodedCalls` is always strict. Any failed subcall rejects with
- * {@link GhostcallSubcallError}, and `allowFailure: true` is rejected before the
- * RPC request is sent. Use {@link aggregateCalls} if you need raw failed entries.
- * Use `options.ethCall` to forward `from`, `gas`, or `blockTag` to the outer
- * `eth_call`.
+ * `aggregateDecodedCalls` is always strict. Its TypeScript input shape requires a
+ * `decodeResult` callback on every call and does not accept `allowFailure`.
+ * Any failed subcall rejects with {@link GhostcallSubcallError}. Use
+ * {@link aggregateCalls} if you need raw failed entries. Use `options.ethCall`
+ * to forward `from`, `gas`, or `blockTag` to the outer `eth_call`.
  *
  * @param provider - EIP-1193-compatible provider with a `request` method.
  * @param calls - Ordered list of strict decoded subcalls to execute.
@@ -392,10 +388,8 @@ async function aggregateCalls(
  *
  * @returns Ordered list of decoded values.
  *
- * @throws {TypeError} If any call is missing a decoder, if a decoder is not a
- *                     function, if `allowFailure: true` is supplied, if inputs are
- *                     not valid Ghostcall call entries, or if the provider returns
- *                     a non-hex `eth_call` result.
+ * @throws {TypeError} If inputs are not valid Ghostcall call entries or if the
+ *                     provider returns a non-hex `eth_call` result.
  * @throws {RangeError} If the encoded CREATE payload exceeds protocol or the
  *                      configured CREATE initcode ceiling.
  * @throws {GhostcallSubcallError} If any subcall fails.
@@ -427,31 +421,12 @@ async function aggregateDecodedCalls<
 	calls: TCalls,
 	options?: GhostcallAggregateOptions,
 ): Promise<GhostcallDecodedResults<TCalls>> {
-	for (const [index, call] of calls.entries()) {
-		if ("allowFailure" in call && call.allowFailure === true) {
-			throw new TypeError(
-				`calls[${index}].allowFailure cannot be true for aggregateDecodedCalls`,
-			);
-		}
-
-		if (typeof call.decodeResult !== "function") {
-			throw new TypeError(`calls[${index}].decodeResult must be a function`);
-		}
-	}
-
 	const entries = await aggregateCalls(provider, calls, options);
 
 	return entries.map((entry, index) => {
-		const call = calls[index];
-		if (call === undefined) {
-			throw new Error("Ghostcall decoded call invariant failed");
-		}
-
-		if (!entry.success) {
-			throw new Error("Ghostcall decoded result invariant failed");
-		}
-
-		return call.decodeResult(entry.returnData, entry, index);
+		const call = calls[index] as TCalls[number];
+		const successEntry = entry as GhostcallSuccessResult;
+		return call.decodeResult(successEntry.returnData, successEntry, index);
 	}) as GhostcallDecodedResults<TCalls>;
 }
 

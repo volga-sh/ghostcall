@@ -259,50 +259,6 @@ test("Ghostcall SDK", async (t) => {
 	);
 
 	await t.test(
-		"rejects aggregateDecodedCalls when a decoder is missing",
-		async () => {
-			const provider = {
-				async request(): Promise<unknown> {
-					return "0x";
-				},
-			};
-
-			await assert.rejects(
-				aggregateDecodedCalls(provider, [
-					{
-						to: "0x1111111111111111111111111111111111111111",
-						data: "0x",
-					},
-				] as never),
-				/calls\[0\].decodeResult must be a function/,
-			);
-		},
-	);
-
-	await t.test(
-		"rejects aggregateDecodedCalls when allowFailure is true",
-		async () => {
-			const provider = {
-				async request(): Promise<unknown> {
-					return "0x";
-				},
-			};
-
-			await assert.rejects(
-				aggregateDecodedCalls(provider, [
-					{
-						to: "0x1111111111111111111111111111111111111111",
-						data: "0x",
-						allowFailure: true,
-						decodeResult: (returnData: `0x${string}`) => returnData,
-					},
-				] as never),
-				/calls\[0\].allowFailure cannot be true/,
-			);
-		},
-	);
-
-	await t.test(
 		"rejects failed decoded subcalls through aggregateDecodedCalls",
 		async () => {
 			const provider = {

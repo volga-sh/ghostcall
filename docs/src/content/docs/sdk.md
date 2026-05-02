@@ -135,8 +135,8 @@ async function aggregateDecodedCalls(
 
 `aggregateDecodedCalls()` uses the same transport flow as `aggregateCalls()`, but it is the strict decoded helper:
 
-- every call must provide `decodeResult`
-- `allowFailure: true` is rejected before the RPC request is sent
+- its TypeScript input requires `decodeResult` on every call
+- its TypeScript input does not accept `allowFailure`
 - any failed subcall rejects with `GhostcallSubcallError`
 
 Use it when you want decoded values directly:
