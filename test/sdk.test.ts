@@ -24,6 +24,23 @@ test("Ghostcall SDK", async (t) => {
 		);
 	});
 
+	await t.test("encodes calldata at the uint16 limit", () => {
+		const baseData = encodeCalls([]);
+		const maxSizedCall = {
+			to: "0x1111111111111111111111111111111111111111",
+			data: `0x${"00".repeat(0xffff)}` as `0x${string}`,
+		} as const;
+		const maxInitcodeBytes =
+			(baseData.length - 2) / 2 + encodedCallHeaderSize + 0xffff;
+
+		const encoded = encodeCalls([maxSizedCall], { maxInitcodeBytes });
+
+		assert.equal(
+			(encoded.length - 2) / 2,
+			(baseData.length - 2) / 2 + encodedCallHeaderSize + 0xffff,
+		);
+	});
+
 	await t.test(
 		"encodes single and multi-call payloads with len-first headers",
 		() => {
@@ -188,7 +205,7 @@ test("Ghostcall SDK", async (t) => {
 				ethCall: {
 					from: "0x3333333333333333333333333333333333333333",
 					gas: "0x5208",
-					blockTag: "safe",
+					blockTag: 123,
 				},
 			});
 
@@ -201,7 +218,7 @@ test("Ghostcall SDK", async (t) => {
 							from: "0x3333333333333333333333333333333333333333",
 							gas: "0x5208",
 						},
-						"safe",
+						"0x7b",
 					],
 				},
 			]);
@@ -408,4 +425,44 @@ test("Ghostcall SDK", async (t) => {
 			/Ghostcall returned 0 result entries for 1 calls/,
 		);
 	});
+
+	await t.test(
+		"rejects invalid outer eth_call options before RPC",
+		async () => {
+			const call = {
+				to: "0x1111111111111111111111111111111111111111",
+				data: "0x",
+			} as const;
+			const provider = {
+				async request(): Promise<unknown> {
+					assert.fail("invalid eth_call options should not reach the provider");
+				},
+			};
+
+			await assert.rejects(
+				aggregateCalls(provider, [call], {
+					ethCall: { from: "0x1234" as const },
+				}),
+				/options\.ethCall\.from must be a 20-byte hex string/,
+			);
+			await assert.rejects(
+				aggregateCalls(provider, [call], {
+					ethCall: { gas: "123" as never },
+				}),
+				/options\.ethCall\.gas must be a 0x-prefixed hex quantity/,
+			);
+			await assert.rejects(
+				aggregateCalls(provider, [call], {
+					ethCall: { blockTag: -1 as never },
+				}),
+				/options\.ethCall\.blockTag must be a non-negative safe integer, bigint, or non-empty string/,
+			);
+			await assert.rejects(
+				aggregateCalls(provider, [call], {
+					ethCall: { blockTag: "" },
+				}),
+				/options\.ethCall\.blockTag must be a non-negative safe integer, bigint, or non-empty string/,
+			);
+		},
+	);
 });

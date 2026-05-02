@@ -10,7 +10,7 @@ back as the RPC result.
 ## Docs
 
 The documentation site lives in [`docs/src/content/docs`](docs/src/content/docs). Run
-`npm run dev --prefix docs` locally or `npm run build --prefix docs` to build the static
+`npm run docs:dev` locally or `npm run docs:build` to build the static
 Starlight site.
 
 ## Install
@@ -110,7 +110,8 @@ The SDK has no ABI helpers and no runtime artifact reads. To ABI-decode successf
 `decodeResult` callbacks that call the ABI library already used by the application. By default,
 `aggregateCalls` returns result entries. Pass `{ results: "decoded" }` to return decoded values
 directly. Use `options.ethCall` to set outer `eth_call` fields such as `from`, `gas`, and
-`blockTag`.
+`blockTag`. `blockTag` accepts named tags such as `latest` or `safe`, canonical hex quantities,
+and decimal block numbers passed as strings, numbers, or bigints.
 
 ## Why this works
 
@@ -119,6 +120,10 @@ directly. Use `options.ethCall` to set outer `eth_call` fields such as `from`, `
 - Initcode can perform ordinary external calls, pack the returned bytes into memory, and `RETURN` them.
 - Returned bytes are still subject to CREATE limits because the client treats them as would-be
   runtime bytecode.
+
+Some RPC providers still reject or special-case CREATE-style `eth_call` requests without a `to`
+field. Treat endpoint compatibility as an environment constraint and test the exact provider you
+plan to use.
 
 The implementation lives in [`src/Ghostcall.yul`](src/Ghostcall.yul).
 
@@ -139,6 +144,7 @@ That keeps the dependency footprint small while giving us a stable place to grow
 This implementation is intentionally focused on the smallest SDK-first variant:
 
 - zero-value `CALL` for subcalls
+- all remaining gas forwarded to each subcall
 - packed binary input instead of ABI encoding
 - packed binary output instead of ABI encoding
 - always-return result entries for every subcall
@@ -148,7 +154,8 @@ That keeps the initcode small, auditable, and easy to extend.
 
 Because subcalls use ordinary `CALL`, they execute from ghostcall's ephemeral CREATE context rather
 than the external account that made the JSON-RPC request. Later subcalls in the same batch can also
-observe state changes made by earlier subcalls during that one simulated execution.
+observe state changes made by earlier subcalls during that one simulated execution. Batch order also
+affects gas availability because each subcall receives all remaining gas at the time it runs.
 
 ## Why not a naive Solidity constructor
 

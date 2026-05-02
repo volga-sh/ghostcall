@@ -102,9 +102,13 @@ The aggregate options also accept outer `eth_call` controls:
 type GhostcallEthCallOptions = {
 	from?: Hex;
 	gas?: `0x${string}`;
-	blockTag?: string;
+	blockTag?: string | number | bigint;
 };
 ```
+
+`blockTag` accepts named tags such as `latest`, `safe`, and `finalized`, canonical hex quantities such as `0x1234`, and decimal block numbers passed as strings, numbers, or bigints. Decimal inputs are normalized to hex quantities before the RPC request is sent.
+
+Subcalls run in order, use ordinary `CALL`, and each one receives all remaining gas at the point it executes. That means earlier calls can affect later ones through both ephemeral state changes and gas consumption.
 
 By default, results are returned as entries:
 

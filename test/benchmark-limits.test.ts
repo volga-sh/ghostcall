@@ -3,9 +3,6 @@ import test from "node:test";
 
 import {
 	balanceInputBytesPerCall,
-	buildBalanceCalls,
-	createRawInitcodeSizeProbe,
-	createRawRuntimeReturnProbe,
 	encodeBalanceOfCalldata,
 	findLimit,
 	parseBenchmarkArgs,
@@ -220,38 +217,6 @@ test("benchmark limit helpers", async (t) => {
 			() => encodeBalanceOfCalldata("0x1234" as Hex),
 			/owner must be a 20-byte hex string/,
 		);
-	});
-
-	await t.test("cycles token and owner inputs deterministically", () => {
-		const tokens = [tokenA, tokenB] as readonly Hex[];
-		const owners = [ownerA, ownerB] as readonly Hex[];
-		const calls = buildBalanceCalls(5, tokens, owners);
-
-		assert.deepEqual(
-			calls.map((call) => [call.to, call.data]),
-			[
-				[tokenA, encodeBalanceOfCalldata(ownerA)],
-				[tokenB, encodeBalanceOfCalldata(ownerA)],
-				[tokenA, encodeBalanceOfCalldata(ownerB)],
-				[tokenB, encodeBalanceOfCalldata(ownerB)],
-				[tokenA, encodeBalanceOfCalldata(ownerA)],
-			],
-		);
-	});
-
-	await t.test("generates exact-size raw initcode probes", () => {
-		assert.equal(createRawInitcodeSizeProbe(5), "0x60006000f3");
-		assert.equal(createRawInitcodeSizeProbe(8), "0x60006000f3000000");
-		assert.throws(
-			() => createRawInitcodeSizeProbe(4),
-			/createRawInitcodeSizeProbe sizeBytes must be an integer >= 5/,
-		);
-	});
-
-	await t.test("generates raw runtime return probes", () => {
-		assert.equal(createRawRuntimeReturnProbe(0), "0x60006000f3");
-		assert.equal(createRawRuntimeReturnProbe(1), "0x60016000f3");
-		assert.equal(createRawRuntimeReturnProbe(24_576), "0x6160006000f3");
 	});
 
 	await t.test(

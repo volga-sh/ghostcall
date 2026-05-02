@@ -293,6 +293,40 @@ test("Ghostcall can return aggregate responses above the old in-contract cap", a
 	}
 });
 
+test("Ghostcall returns one entry at the uint15 returndata header limit", async (t) => {
+	const anvil = await startAnvil({ args: ["--code-size-limit", "65536"] });
+	t.after(async () => {
+		await stopAnvil(anvil);
+	});
+
+	const mockArtifact = await loadArtifact(mockArtifactPath);
+	const mockInitcode = readBytecode(mockArtifact, mockArtifactPath);
+	const mockAbi = readAbi(mockArtifact, mockArtifactPath);
+	const mockAddress = await deployContract(anvil.transport, mockInitcode);
+
+	const givenCalldataReturn = AbiFunction.fromAbi(
+		mockAbi,
+		"givenCalldataReturn",
+	);
+	const largeCall = "0x12345678";
+	const maxSizedResponse = `0x${"11".repeat(0x7fff)}` as Hex.Hex;
+
+	await sendFunctionTransaction(
+		anvil.transport,
+		mockAddress,
+		givenCalldataReturn,
+		[largeCall, maxSizedResponse],
+	);
+
+	const [entry] = await aggregateCalls(anvil.transport, [
+		{ to: mockAddress, data: largeCall },
+	]);
+
+	assert.ok(entry);
+	assert.equal(entry.success, true);
+	assert.equal(entry.returnData, maxSizedResponse);
+});
+
 test("Ghostcall reverts when one entry exceeds the uint15 returndata header", async (t) => {
 	const anvil = await startAnvil({ args: ["--code-size-limit", "65536"] });
 	t.after(async () => {

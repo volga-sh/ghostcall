@@ -14,6 +14,11 @@ type Hex = `0x${string}`;
 type HexQuantity = `0x${string}`;
 
 /**
+ * Block reference accepted by the outer `eth_call`.
+ */
+type GhostcallBlockReference = string | number | bigint;
+
+/**
  * One Ghostcall subcall entry.
  */
 type GhostcallCall = {
@@ -72,16 +77,33 @@ type GhostcallDecodedAggregateCall<TResult = unknown> = GhostcallCall & {
 };
 
 /**
- * One decoded Ghostcall result entry.
+ * One successful Ghostcall result entry.
  */
-type GhostcallResult = {
+type GhostcallSuccessResult = {
+	/**
+	 * Indicates whether the underlying EVM `CALL` returned successfully.
+	 *
+	 * A `true` value means the target call returned successfully.
+	 */
+	success: true;
+
+	/**
+	 * Raw return data produced by the target call.
+	 */
+	returnData: Hex;
+};
+
+/**
+ * One failed Ghostcall result entry.
+ */
+type GhostcallFailedResult = {
 	/**
 	 * Indicates whether the underlying EVM `CALL` returned successfully.
 	 *
 	 * A `false` value means the target call reverted or otherwise failed, but the
 	 * Ghostcall batch itself still completed successfully.
 	 */
-	success: boolean;
+	success: false;
 
 	/**
 	 * Raw return data produced by the target call.
@@ -93,21 +115,24 @@ type GhostcallResult = {
 };
 
 /**
+ * One decoded Ghostcall result entry.
+ */
+type GhostcallResult = GhostcallSuccessResult | GhostcallFailedResult;
+
+/**
  * Function used by {@link aggregateCalls} to turn raw successful return data into
  * a caller-chosen value.
  */
 type GhostcallResultDecoder<TResult> = (
 	returnData: Hex,
-	entry: GhostcallResult,
+	entry: GhostcallSuccessResult,
 	index: number,
 ) => TResult;
 
 /**
  * One decoded aggregate result entry when a call provides `decodeResult`.
  */
-type GhostcallDecodedResult<TResult> = {
-	success: true;
-	returnData: Hex;
+type GhostcallDecodedResult<TResult> = GhostcallSuccessResult & {
 	decodedResult: TResult;
 };
 
@@ -117,12 +142,12 @@ type GhostcallDecodedResult<TResult> = {
 class GhostcallSubcallError extends Error {
 	readonly index: number;
 	readonly call: GhostcallAggregateCall;
-	readonly result: GhostcallResult;
+	readonly result: GhostcallFailedResult;
 
 	constructor(
 		index: number,
 		call: GhostcallAggregateCall,
-		result: GhostcallResult,
+		result: GhostcallFailedResult,
 	) {
 		super(`Ghostcall subcall ${index} failed`);
 		this.name = "GhostcallSubcallError";
@@ -137,7 +162,7 @@ type GhostcallAggregateResult<TCall> = TCall extends {
 	decodeResult: GhostcallResultDecoder<infer TResult>;
 }
 	? TCall extends { allowFailure: true }
-		? GhostcallDecodedResult<TResult> | GhostcallResult
+		? GhostcallDecodedResult<TResult> | GhostcallFailedResult
 		: GhostcallDecodedResult<TResult>
 	: GhostcallResult;
 
@@ -178,11 +203,12 @@ type GhostcallEthCallOptions = {
 	gas?: HexQuantity;
 
 	/**
-	 * Optional block tag or block number for the outer `eth_call`.
+	 * Optional block tag, hex quantity, or block number for the outer `eth_call`.
 	 *
+	 * Decimal strings, numbers, and bigints are normalized to hex quantities.
 	 * Defaults to `latest`.
 	 */
-	blockTag?: string;
+	blockTag?: GhostcallBlockReference;
 };
 
 type GhostcallAggregateOptions = GhostcallEncodeOptions & {
@@ -414,7 +440,10 @@ async function aggregateCalls<
 
 	const data = encodeCalls(calls, options);
 	const ethCall = { data } as { data: Hex; from?: Hex; gas?: HexQuantity };
-	const blockTag = options.ethCall?.blockTag ?? "latest";
+	const blockTag = normalizeBlockTag(
+		options.ethCall?.blockTag ?? "latest",
+		"options.ethCall.blockTag",
+	);
 
 	if (options.ethCall?.from !== undefined) {
 		assertAddress(options.ethCall.from, "options.ethCall.from");
@@ -423,10 +452,6 @@ async function aggregateCalls<
 
 	if (options.ethCall?.gas !== undefined) {
 		ethCall.gas = assertHexQuantity(options.ethCall.gas, "options.ethCall.gas");
-	}
-
-	if (typeof blockTag !== "string" || blockTag.length === 0) {
-		throw new TypeError("options.ethCall.blockTag must be a non-empty string");
 	}
 
 	const result = await provider.request({
@@ -457,6 +482,10 @@ async function aggregateCalls<
 			const call = decodedCalls[index];
 			if (call === undefined) {
 				throw new Error("Ghostcall decoded call invariant failed");
+			}
+
+			if (!entry.success) {
+				throw new Error("Ghostcall decoded result invariant failed");
 			}
 
 			return call.decodeResult(entry.returnData, entry, index);
@@ -620,6 +649,60 @@ function assertHexQuantity(value: unknown, label: string): HexQuantity {
 }
 
 /**
+ * Normalizes a block reference into the RPC shape expected by `eth_call`.
+ *
+ * @param value - Block reference to normalize.
+ * @param label - Field name used in thrown error messages.
+ * @returns Normalized block reference.
+ * @throws {TypeError} If the value is not a supported block reference.
+ *
+ * @internal
+ */
+function normalizeBlockTag(value: unknown, label: string): string {
+	if (typeof value === "number") {
+		if (!Number.isSafeInteger(value) || value < 0) {
+			throw new TypeError(
+				`${label} must be a non-negative safe integer, bigint, or non-empty string`,
+			);
+		}
+
+		return `0x${value.toString(16)}`;
+	}
+
+	if (typeof value === "bigint") {
+		if (value < 0n) {
+			throw new TypeError(
+				`${label} must be a non-negative safe integer, bigint, or non-empty string`,
+			);
+		}
+
+		return `0x${value.toString(16)}`;
+	}
+
+	if (typeof value !== "string" || value.length === 0) {
+		throw new TypeError(
+			`${label} must be a non-negative safe integer, bigint, or non-empty string`,
+		);
+	}
+
+	if (/^-?[0-9]+$/.test(value)) {
+		if (value.startsWith("-")) {
+			throw new TypeError(
+				`${label} must be a non-negative safe integer, bigint, or non-empty string`,
+			);
+		}
+
+		return `0x${BigInt(value).toString(16)}`;
+	}
+
+	if (value.startsWith("0x") || value.startsWith("0X")) {
+		return assertHexQuantity(`0x${value.slice(2)}`, label);
+	}
+
+	return value;
+}
+
+/**
  * Resolves the active CREATE initcode ceiling.
  *
  * @param value - Optional caller override.
@@ -659,6 +742,7 @@ export type {
 	GhostcallAggregateCall,
 	GhostcallAggregateOptions,
 	GhostcallAggregateResult,
+	GhostcallBlockReference,
 	GhostcallCall,
 	GhostcallDecodedAggregateCall,
 	GhostcallDecodedAggregateOptions,
@@ -666,8 +750,10 @@ export type {
 	GhostcallDecodedResults,
 	GhostcallEncodeOptions,
 	GhostcallEthCallOptions,
+	GhostcallFailedResult,
 	GhostcallResult,
 	GhostcallResultDecoder,
+	GhostcallSuccessResult,
 	Hex,
 	HexQuantity,
 };

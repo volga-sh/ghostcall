@@ -100,8 +100,10 @@ const results = decodeResults(response as `0x${string}`);
 
 The `eth_call` object intentionally omits `to`. That is what makes the EVM execute the supplied data as CREATE initcode.
 
+Some RPC providers do not support this CREATE-style `eth_call` pattern consistently, so verify the exact endpoint you plan to use.
+
 ## Failure policy
 
 Subcall failures are returned by the protocol as result entries. `aggregateCalls()` rejects failed entries by default. Set `allowFailure: true` on a call when you want that failed entry returned to the caller instead.
 
-Decoded-results mode is strict: every call must provide `decodeResult`, and `allowFailure` cannot be true.
+Decoded-results mode is strict: every call must provide `decodeResult`, and `allowFailure` cannot be true. Batch order also matters for gas usage because each subcall receives all remaining gas when it runs.

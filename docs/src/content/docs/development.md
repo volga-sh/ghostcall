@@ -26,7 +26,7 @@ npm run docs:build
 npm run docs:preview
 ```
 
-The docs site is powered by Starlight. Source files live under `docs/src`, and the static build output goes to `docs/dist`.
+These root scripts proxy to the Starlight app in `docs/`. Source files live under `docs/src`, and the static build output goes to `docs/dist`.
 
 ## Project layout
 
