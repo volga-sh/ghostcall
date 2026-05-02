@@ -38,7 +38,7 @@ The payload is a repeated list of call entries:
 N bytes calldata
 ```
 
-There is no separate count field. The program advances through the appended payload until its cursor reaches the end of code. SDK-generated payloads are validated before execution; raw hand-built payloads must follow the wire format exactly. Malformed raw payload behavior is unspecified.
+There is no separate count field. The program advances through the appended payload until its cursor reaches the end of code. SDK-generated payloads are validated before the RPC request is sent; raw hand-built payloads must follow the wire format exactly. Malformed raw payload behavior is unspecified.
 
 The length comes first so the Yul program can copy the 22-byte fixed header to the current memory write pointer. One `mload` exposes the length in the high two bytes and the target shifted above the trailing scratch bytes.
 
