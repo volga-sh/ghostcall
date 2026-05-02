@@ -1,13 +1,58 @@
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
 
+const site = "https://ghostcall.volga.sh";
+const socialImage = new URL("/og.png", site).href;
+
 export default defineConfig({
-	site: "https://ghostcall.volga.sh",
+	site,
 	integrations: [
 		starlight({
 			title: "ghostcall",
 			description:
-				"Zero-deployment batching program and TypeScript SDK for CREATE-style eth_call requests.",
+				"Batch EVM blockchain reads without deployment dependencies.",
+			head: [
+				{
+					tag: "meta",
+					attrs: { property: "og:image", content: socialImage },
+				},
+				{
+					tag: "meta",
+					attrs: { property: "og:image:secure_url", content: socialImage },
+				},
+				{
+					tag: "meta",
+					attrs: { property: "og:image:type", content: "image/png" },
+				},
+				{
+					tag: "meta",
+					attrs: { property: "og:image:width", content: "1200" },
+				},
+				{
+					tag: "meta",
+					attrs: { property: "og:image:height", content: "630" },
+				},
+				{
+					tag: "meta",
+					attrs: {
+						property: "og:image:alt",
+						content:
+							"ghostcall docs: Batch EVM blockchain reads without deployment dependencies.",
+					},
+				},
+				{
+					tag: "meta",
+					attrs: { name: "twitter:image", content: socialImage },
+				},
+				{
+					tag: "meta",
+					attrs: {
+						name: "twitter:image:alt",
+						content:
+							"ghostcall docs: Batch EVM blockchain reads without deployment dependencies.",
+					},
+				},
+			],
 			customCss: ["./src/styles/volga.css"],
 			editLink: {
 				baseUrl: "https://github.com/volga-sh/ghostcall/edit/main/docs/",

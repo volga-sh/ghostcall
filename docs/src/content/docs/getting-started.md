@@ -1,6 +1,6 @@
 ---
 title: Getting Started
-description: Install ghostcall and send a CREATE-style eth_call batch with the TypeScript SDK.
+description: Install ghostcall and batch EVM blockchain reads with the TypeScript SDK.
 ---
 
 Get from install to a real batch in a few lines. The recommended entrypoint is `aggregateDecodedCalls()` because it performs the CREATE-style `eth_call`, checks strict failures, and returns decoded values in request order.

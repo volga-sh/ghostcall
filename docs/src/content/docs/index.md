@@ -1,9 +1,20 @@
 ---
 title: ghostcall
-description: ghostcall is a zero-deployment batching program for CREATE-style eth_call requests.
+description: ghostcall batches EVM blockchain reads without deployment dependencies.
+head:
+  - tag: title
+    content: ghostcall docs
+  - tag: meta
+    attrs:
+      property: og:title
+      content: ghostcall docs
+  - tag: meta
+    attrs:
+      name: twitter:title
+      content: ghostcall docs
 ---
 
-Batch contract reads without relying on a deployed Multicall contract.
+Batch EVM blockchain reads without deployment dependencies.
 
 ```sh
 npm install @volga-sh/evm-ghostcall

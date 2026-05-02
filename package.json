@@ -1,7 +1,7 @@
 {
 	"name": "@volga-sh/evm-ghostcall",
 	"version": "0.0.1",
-	"description": "Zero-deployment batching program and TypeScript SDK for CREATE-style eth_call requests.",
+	"description": "Batch EVM blockchain reads without deployment dependencies.",
 	"license": "MIT",
 	"type": "module",
 	"repository": {

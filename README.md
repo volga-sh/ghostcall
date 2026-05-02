@@ -1,6 +1,6 @@
 # ghostcall
 
-`ghostcall` is a zero-deployment batching SDK for CREATE-style `eth_call` requests.
+`ghostcall` batches EVM blockchain reads without deployment dependencies.
 
 ## Documentation
 
