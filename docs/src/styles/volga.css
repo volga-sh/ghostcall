@@ -1,0 +1,319 @@
+@font-face {
+	font-family: "DM Serif Display";
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url("/fonts/dm-serif-display-latin-400.woff2") format("woff2");
+	unicode-range:
+		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+		U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+		U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: "DM Serif Display";
+	font-style: italic;
+	font-weight: 400;
+	font-display: swap;
+	src: url("/fonts/dm-serif-display-latin-400-italic.woff2") format("woff2");
+	unicode-range:
+		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+		U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+		U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: "Inter";
+	font-style: normal;
+	font-weight: 300 600;
+	font-display: swap;
+	src: url("/fonts/inter-latin-variable.woff2") format("woff2");
+	unicode-range:
+		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+		U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+		U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root,
+::backdrop {
+	--gc-bg: #1a1a1a;
+	--gc-surface: #211f1d;
+	--gc-surface-soft: #282522;
+	--gc-fg: #faf9f7;
+	--gc-muted: #b8b0a8;
+	--gc-accent: #c45c3e;
+	--gc-rule: #3a3530;
+
+	--sl-color-white: var(--gc-fg);
+	--sl-color-gray-1: #f4f0eb;
+	--sl-color-gray-2: #d7d0c9;
+	--sl-color-gray-3: var(--gc-muted);
+	--sl-color-gray-4: #817871;
+	--sl-color-gray-5: #4f4741;
+	--sl-color-gray-6: var(--gc-surface-soft);
+	--sl-color-black: var(--gc-bg);
+	--sl-color-accent-low: #3a211b;
+	--sl-color-accent: var(--gc-accent);
+	--sl-color-accent-high: #f0c8bb;
+	--sl-color-text: var(--gc-muted);
+	--sl-color-text-accent: var(--gc-accent);
+	--sl-color-text-invert: var(--gc-fg);
+	--sl-color-bg: var(--gc-bg);
+	--sl-color-bg-nav: color-mix(in srgb, var(--gc-bg) 92%, transparent);
+	--sl-color-bg-sidebar: var(--gc-bg);
+	--sl-color-bg-inline-code: var(--gc-surface-soft);
+	--sl-color-bg-accent: var(--gc-accent);
+	--sl-color-hairline-light: var(--gc-rule);
+	--sl-color-hairline: var(--gc-rule);
+	--sl-color-hairline-shade: var(--gc-rule);
+
+	--sl-shadow-sm: none;
+	--sl-shadow-md: none;
+	--sl-shadow-lg: none;
+	--sl-font:
+		"Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+		"Segoe UI", sans-serif;
+	--sl-font-mono: "SF Mono", "Cascadia Code", ui-monospace, monospace;
+	--sl-line-height: 1.7;
+	--sl-line-height-headings: 1.12;
+	--sl-content-width: 48rem;
+	--sl-sidebar-width: 17.5rem;
+	--sl-text-h1: 2.75rem;
+	--sl-text-h2: 1.8rem;
+	--sl-text-h3: 1.25rem;
+	--sl-content-gap-y: 1.15rem;
+}
+
+:root[data-theme="light"],
+[data-theme="light"] ::backdrop {
+	--gc-bg: #faf9f7;
+	--gc-surface: #ffffff;
+	--gc-surface-soft: #f3f0eb;
+	--gc-fg: #1a1a1a;
+	--gc-muted: #6b6560;
+	--gc-accent: #c45c3e;
+	--gc-rule: #e0ddd8;
+
+	--sl-color-white: var(--gc-fg);
+	--sl-color-gray-1: #24211e;
+	--sl-color-gray-2: #3d3833;
+	--sl-color-gray-3: var(--gc-muted);
+	--sl-color-gray-4: #9b938c;
+	--sl-color-gray-5: #c7c2ba;
+	--sl-color-gray-6: var(--gc-rule);
+	--sl-color-gray-7: var(--gc-bg);
+	--sl-color-black: var(--gc-bg);
+	--sl-color-accent-high: #7b2d1c;
+	--sl-color-accent: var(--gc-accent);
+	--sl-color-accent-low: #ead8d0;
+	--sl-color-text: var(--gc-muted);
+	--sl-color-text-accent: var(--gc-accent);
+	--sl-color-text-invert: var(--gc-bg);
+	--sl-color-bg: var(--gc-bg);
+	--sl-color-bg-nav: color-mix(in srgb, var(--gc-bg) 92%, transparent);
+	--sl-color-bg-sidebar: var(--gc-bg);
+	--sl-color-bg-inline-code: var(--gc-surface-soft);
+	--sl-color-bg-accent: var(--gc-accent);
+	--sl-color-hairline-light: var(--gc-rule);
+	--sl-color-hairline: var(--gc-rule);
+	--sl-color-hairline-shade: var(--gc-rule);
+}
+
+@media (min-width: 50rem) {
+	:root {
+		--sl-text-h1: 3.45rem;
+		--sl-text-h2: 2rem;
+		--sl-text-h3: 1.35rem;
+	}
+}
+
+@media (max-width: 49.99rem) {
+	.main-frame,
+	.main-pane,
+	main,
+	.content-panel {
+		width: 100vw;
+		max-width: 100vw;
+		overflow-x: clip;
+	}
+
+	.content-panel > .sl-container,
+	.sl-markdown-content,
+	h1#_top {
+		width: 100%;
+		max-width: calc(100vw - 2rem);
+	}
+
+	.expressive-code,
+	.expressive-code figure.frame,
+	.expressive-code pre {
+		min-width: 0;
+		max-width: 100%;
+	}
+}
+
+main,
+.main-pane,
+.content-panel,
+.content-panel > .sl-container,
+.sl-markdown-content {
+	min-width: 0;
+	max-width: 100%;
+}
+
+html,
+body {
+	background: var(--gc-bg);
+}
+
+body {
+	font-weight: 300;
+}
+
+.page > .header {
+	backdrop-filter: blur(14px);
+}
+
+.site-title {
+	color: var(--gc-fg);
+	font-family: "DM Serif Display", Georgia, serif;
+	font-size: 1.35rem;
+	font-weight: 400;
+}
+
+site-search button {
+	border: 1px solid var(--gc-rule);
+	background: var(--gc-surface);
+	color: var(--gc-muted);
+}
+
+site-search button:hover {
+	border-color: color-mix(in srgb, var(--gc-accent) 42%, var(--gc-rule));
+	color: var(--gc-fg);
+}
+
+starlight-theme-select label {
+	color: var(--gc-muted);
+}
+
+starlight-theme-select select {
+	background-color: transparent;
+	font-weight: 300;
+}
+
+.sidebar-content {
+	padding-top: 1.75rem;
+}
+
+.sidebar-content summary {
+	color: var(--gc-fg);
+	font-size: 0.73rem;
+	font-weight: 500;
+	text-transform: uppercase;
+}
+
+.sidebar-content a {
+	border-radius: 0;
+	color: var(--gc-muted);
+	font-weight: 300;
+}
+
+.sidebar-content a[aria-current="page"],
+.sidebar-content a:hover {
+	background-color: transparent;
+	color: var(--gc-accent);
+}
+
+.right-sidebar-panel {
+	border-inline-start: 1px solid var(--gc-rule);
+}
+
+.right-sidebar-panel h2 {
+	font-size: 0.73rem;
+	text-transform: uppercase;
+}
+
+.right-sidebar-panel a {
+	color: var(--gc-muted);
+	font-weight: 300;
+}
+
+.right-sidebar-panel a:hover,
+.right-sidebar-panel a[aria-current="true"] {
+	color: var(--gc-accent);
+}
+
+.content-panel {
+	border-top: 0;
+}
+
+.sl-markdown-content {
+	color: var(--gc-muted);
+	font-weight: 300;
+}
+
+.sl-markdown-content h1:not(:where(.not-content *)),
+h1#_top {
+	color: var(--gc-fg);
+	font-family: "DM Serif Display", Georgia, serif;
+	font-weight: 400;
+	overflow-wrap: anywhere;
+}
+
+.sl-markdown-content :is(h2, h3, h4):not(:where(.not-content *)) {
+	color: var(--gc-fg);
+	font-weight: 500;
+}
+
+.sl-markdown-content a:not(:where(.not-content *)) {
+	color: var(--gc-fg);
+	text-decoration: none;
+	border-bottom: 1px solid color-mix(in srgb, var(--gc-accent) 55%, transparent);
+}
+
+.sl-markdown-content a:hover:not(:where(.not-content *)) {
+	color: var(--gc-accent);
+	border-bottom-color: var(--gc-accent);
+}
+
+.sl-markdown-content code:not(:where(.not-content *)) {
+	border: 1px solid var(--gc-rule);
+	border-radius: 0.25rem;
+	background: var(--gc-surface-soft);
+	color: var(--gc-fg);
+}
+
+.sl-markdown-content pre:not(:where(.not-content *)),
+.expressive-code figure.frame {
+	width: 100%;
+	max-width: 100%;
+	border: 1px solid var(--gc-rule);
+	border-radius: 0.5rem;
+	background: var(--gc-surface);
+	box-shadow: none;
+}
+
+.expressive-code,
+.expressive-code pre {
+	max-width: 100%;
+	overflow-x: auto;
+}
+
+.expressive-code figure.frame figcaption.header {
+	border-bottom-color: var(--gc-rule);
+	background: var(--gc-surface-soft);
+}
+
+.expressive-code .copy button {
+	border-color: var(--gc-rule);
+	background: var(--gc-surface-soft);
+}
+
+.sl-markdown-content blockquote:not(:where(.not-content *)) {
+	border-inline-start-color: var(--gc-accent);
+	color: var(--gc-muted);
+}
+
+.sl-markdown-content :is(th, td):not(:where(.not-content *)) {
+	border-bottom-color: var(--gc-rule);
+}

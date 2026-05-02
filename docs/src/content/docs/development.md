@@ -39,6 +39,6 @@ These root scripts proxy to the Starlight app in `docs/`. Source files live unde
 
 ## Change discipline
 
-Keep Yul, generated initcode, SDK behavior, tests, README, and docs in lockstep. Public semantic changes should update tests and documentation in the same change.
+Keep Yul, generated initcode, SDK behavior, tests, and docs in lockstep. Public semantic changes should update tests and the docs website in the same change. Keep the README as a concise pointer to the website and core repository commands.
 
 Prefer direct protocol language over convenience abstractions. Ghostcall is meant to stay small, auditable, and clear about wire-format behavior.

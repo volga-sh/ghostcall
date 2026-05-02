@@ -1,25 +1,22 @@
 # ghostcall
 
-`ghostcall` is a zero-deployment batching program for CREATE-style `eth_call`.
+`ghostcall` is a zero-deployment batching SDK for CREATE-style `eth_call` requests.
 
-Instead of calling a deployed Multicall contract, the client sends compiled initcode plus an
-appended payload. The EVM executes that initcode exactly as if it were deploying a contract, but
-because the transport is `eth_call`, nothing is persisted. Whatever the initcode `RETURN`s comes
-back as the RPC result.
+## Documentation
 
-## Docs
+The docs live at [ghostcall.volga.sh](https://ghostcall.volga.sh).
 
-The documentation site lives in [`docs/src/content/docs`](docs/src/content/docs). Run
-`npm run docs:dev` locally or `npm run docs:build` to build the static
-Starlight site.
+Start there for installation, examples, the API reference, protocol details, and endpoint limit notes.
 
 ## Install
 
-```bash
+```sh
 npm install @volga-sh/evm-ghostcall
 ```
 
-## Quick example
+## Quick Start
+
+This example uses viem for the EIP-1193-compatible client and ABI helpers. Install it with `npm install viem` if your app does not already use it.
 
 ```ts
 import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
@@ -32,308 +29,55 @@ import {
 } from "viem";
 import { mainnet } from "viem/chains";
 
-const erc20Abi = parseAbi([
-	"function balanceOf(address account) view returns (uint256)",
-	"function allowance(address owner, address spender) view returns (uint256)",
-]);
-
-const usdc = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
-const owner = "0x28C6c06298d514Db089934071355E5743bf21d60";
-const spender = "0xE592427A0AEce92De3Edee1F18E0157C05861564";
-
 const client = createPublicClient({
 	chain: mainnet,
 	transport: http(),
 });
 
-const [balance, allowance] = await aggregateDecodedCalls(
-	client,
-	[
-		{
-			to: usdc,
-			data: encodeFunctionData({
+const erc20Abi = parseAbi(["function totalSupply() view returns (uint256)"]);
+
+const [totalSupply] = await aggregateDecodedCalls(client, [
+	{
+		to: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+		data: encodeFunctionData({
+			abi: erc20Abi,
+			functionName: "totalSupply",
+		}),
+		decodeResult: (returnData) =>
+			decodeFunctionResult({
 				abi: erc20Abi,
-				functionName: "balanceOf",
-				args: [owner],
+				functionName: "totalSupply",
+				data: returnData,
 			}),
-			decodeResult: (data) =>
-				decodeFunctionResult({
-					abi: erc20Abi,
-					functionName: "balanceOf",
-					data,
-				}),
-		},
-		{
-			to: usdc,
-			data: encodeFunctionData({
-				abi: erc20Abi,
-				functionName: "allowance",
-				args: [owner, spender],
-			}),
-			decodeResult: (data) =>
-				decodeFunctionResult({
-					abi: erc20Abi,
-					functionName: "allowance",
-					data,
-				}),
-		},
-	],
-);
-
-console.log({
-	balance,
-	allowance,
-});
+	},
+]);
 ```
 
-## TypeScript SDK
+See the [Getting Started guide](https://ghostcall.volga.sh/getting-started/) for a complete viem example with ABI encoding and decoding.
 
-The TypeScript SDK intentionally exposes only the small protocol surface:
+## API
 
-- `encodeCalls(calls, options?)` bundles the canonical Ghostcall initcode and returns the full CREATE-style `eth_call` data blob.
-- `decodeResults(data)` parses the packed Ghostcall response format into `{ success, returnData }` entries.
-- `aggregateCalls(provider, calls, options?)` sends the CREATE-style `eth_call` through an EIP-1193 `request` provider and returns raw `{ success, returnData }` entries.
-- `aggregateDecodedCalls(provider, calls, options?)` sends the same request path for strict batches and returns decoded values directly.
+- `aggregateDecodedCalls()` sends a strict batch and returns decoded values.
+- `aggregateCalls()` sends a batch and returns raw `{ success, returnData }` entries.
+- `encodeCalls()` builds the CREATE-style `eth_call` data payload.
+- `decodeResults()` parses the packed ghostcall response.
 
-`encodeCalls` fails fast if any subcall exceeds the `uint16` calldata limit or if the full
-encoded CREATE payload would exceed the configured CREATE initcode ceiling. By default that ceiling
-is Ethereum's EIP-3860 `49,152`-byte limit, but callers can override it with `maxInitcodeBytes`
-when targeting environments with different rules.
+Full reference: [API docs](https://ghostcall.volga.sh/api/).
 
-`aggregateCalls` treats `allowFailure` as an SDK-side policy. Failed subcalls reject by default,
-matching Multicall3-style strict batches, while calls marked `allowFailure: true` are returned as
-ordinary `{ success: false, returnData }` entries. Strict failures throw `GhostcallSubcallError`,
-which preserves the subcall index, original call, and raw failed result entry so callers can inspect
-revert data.
+## Development
 
-The SDK has no ABI helpers and no runtime artifact reads. To ABI-decode successful entries, pass
-`decodeResult` callbacks to `aggregateDecodedCalls` and use the ABI library already used by the
-application. Use `options.ethCall` to set outer `eth_call` fields such as `from`, `gas`, and
-`blockTag`. In TypeScript, `aggregateDecodedCalls` requires `decodeResult` on every call and does
-not accept `allowFailure`. `blockTag` accepts named tags such as `latest` or `safe`, canonical hex
-quantities, and decimal block numbers passed as strings, numbers, or bigints.
-
-## Why this works
-
-- `eth_call` without a `to` field executes the supplied `data` as CREATE initcode.
-- Initcode can read caller-appended bytes from its own code using `CODECOPY`.
-- Initcode can perform ordinary external calls, pack the returned bytes into memory, and `RETURN` them.
-- Returned bytes are still subject to CREATE limits because the client treats them as would-be
-  runtime bytecode.
-
-Some RPC providers still reject or special-case CREATE-style `eth_call` requests without a `to`
-field. Treat endpoint compatibility as an environment constraint and test the exact provider you
-plan to use.
-
-The implementation lives in [`src/Ghostcall.yul`](src/Ghostcall.yul).
-
-## Development stack
-
-The repository now uses a minimal TypeScript-based test stack:
-
-- Foundry for contract compilation and `anvil`
-- Node's built-in [`node:test`](https://nodejs.org/api/test.html) runner
-- Node's built-in TypeScript stripping for test execution
-- [`ox`](https://www.npmjs.com/package/ox) for JSON-RPC, ABI, hex, and byte utilities
-- [`@safe-global/mock-contract`](https://www.npmjs.com/package/@safe-global/mock-contract) for configurable mock-call behavior
-
-That keeps the dependency footprint small while giving us a stable place to grow ABI-heavy tests.
-
-## Current scope
-
-This implementation is intentionally focused on the smallest SDK-first variant:
-
-- zero-value `CALL` for subcalls
-- all remaining gas forwarded to each subcall
-- packed binary input instead of ABI encoding
-- packed binary output instead of ABI encoding
-- always-return result entries for every subcall
-- SDK-enforced strict failure policy instead of engine-enforced batch reverts
-
-That keeps the initcode small, auditable, and easy to extend.
-
-Because subcalls use ordinary `CALL`, they execute from ghostcall's ephemeral CREATE context rather
-than the external account that made the JSON-RPC request. Later subcalls in the same batch can also
-observe state changes made by earlier subcalls during that one simulated execution. Batch order also
-affects gas availability because each subcall receives all remaining gas at the time it runs.
-
-## Why not a naive Solidity constructor
-
-A straightforward deployless design is to write a Solidity constructor that:
-
-- accepts an ABI-encoded array of calls,
-- executes them in the constructor, and
-- rewrites constructor memory so the returned bytes look like a normal ABI-encoded multicall result.
-
-That approach works, but this project intentionally uses a lower-level Yul program instead.
-
-Advantages of the current design:
-
-- smaller base program, because it avoids Solidity's constructor scaffolding and generic ABI decoding,
-- a tighter wire format, because both requests and responses use a compact custom binary layout instead of full ABI encoding,
-- less compiler coupling, because the batching logic does not depend on Solidity memory-layout assumptions inside constructor-generated code.
-
-In practice, this means less initcode to ship on every request, fewer bytes on the wire, and a design that is easier to reason about at the EVM level.
-
-## Input format
-
-The caller sends:
-
-```text
-<compiled ghostcall initcode><payload>
-```
-
-Payload layout:
-
-```text
-N bytes  repeated call entries
-```
-
-Each call entry:
-
-```text
- 2 bytes calldata length (big-endian uint16)
-20 bytes target
- N bytes calldata
-```
-
-Notes:
-
-- Payload bytes are not normal calldata. They are appended after the compiled initcode and read via
-  `CODECOPY`.
-- The length comes first on purpose. Ghostcall copies the 22-byte fixed header into scratch memory
-  at offset `0x0a`, so one `mload(0x00)` exposes the length in the high 2 non-zero bytes and the
-  target address in the low 20 bytes used by `CALL`.
-- An empty payload is valid and returns an empty result blob.
-- Per-call calldata is limited to `65535` bytes because the format uses `uint16`.
-- The whole CREATE payload is still limited by the network/client initcode size ceiling.
-
-## Output format
-
-The program returns:
-
-```text
-N bytes  repeated result entries
-```
-
-Each result entry:
-
-```text
- 2 bytes packed header
-         bit 15    = success flag
-         bits 0-14 = returndata length (big-endian uint15)
- N bytes returndata
-```
-
-Subcall failures are returned inline as ordinary result entries with `success = 0`.
-
-The engine only reverts for malformed payloads or per-entry return-size violations, and those
-top-level reverts are intentionally empty. The SDK is expected to validate payloads up front and
-impose any higher-level "fail the whole batch" policy for callers that want it.
-
-The packed result header can represent up to `32767` bytes of returndata per entry. On
-Ethereum, EIP-170's returned-code limit is usually the stricter bound: CREATE-style execution
-limits the whole response to `24,576` bytes, including the 2-byte header on each entry.
-
-## Limits
-
-The aggregate response is returned through CREATE-style execution, so clients still treat it as
-would-be runtime code. Ghostcall does not impose its own aggregate response cap; the effective
-ceiling comes from the chain, client, RPC provider, gas setting, and request-size policy.
-
-Common reference points:
-
-- Ethereum's EIP-170 returned-code limit is `24,576` bytes.
-- Ethereum's EIP-3860 initcode limit is `49,152` bytes.
-- Other chains may set different values. For example, Monad documents larger contract-code and
-  initcode limits.
-
-Measure the endpoint you plan to use instead of assuming a consensus value. Provider-side request
-limits can be lower than the chain limit.
-
-## Benchmark limits
-
-The repository includes a TypeScript benchmark for rough endpoint-specific measurements:
-
-```bash
-npm run benchmark:limits -- --rpc-url "$RPC_URL" --mode raw
-```
-
-`raw` mode probes accepted CREATE initcode bytes and returned runtime-code bytes. `balances` mode
-uses a realistic ERC-20 balance workload:
-
-```bash
-npm run benchmark:limits -- \
-  --rpc-url "$RPC_URL" \
-  --mode balances \
-  --token "$TOKEN_ADDRESS" \
-  --owner "$OWNER_ADDRESS"
-```
-
-For balance benchmarking, pass token addresses that implement `balanceOf(address)` on the selected
-chain. The script repeats those token and owner inputs, builds ghostcall batches with the public
-SDK encoder, and searches for the largest successful call count. The balance search is capped by
-both `--max-calls` and `--max-initcode-bytes`.
-
-Useful options:
-
-- `--mode raw|balances|all`, default `all`
-- `--token` and `--owner`, repeatable or comma-separated
-- `--block`, `--from`, `--gas`, and `--timeout-ms`
-- `--max-calls`, `--max-initcode-bytes`, and `--max-runtime-bytes`
-- `--json` for machine-readable output
-
-## Install
-
-```bash
+```sh
 npm install
+npm run build:sdk
+npm run test
+npm run check
 ```
 
-## Build contracts
+Docs are built with Astro Starlight:
 
-```bash
-npm run build:contracts
+```sh
+npm run docs:dev
+npm run docs:build
 ```
 
-The compiled artifacts are emitted into the standard Foundry artifact tree under `out/`.
-That build step also refreshes the generated SDK initcode file at
-[`src/sdk/generated/initcode.ts`](src/sdk/generated/initcode.ts).
-
-## Test
-
-```bash
-npm test
-```
-
-The test suite:
-
-- compiles the contracts with Foundry,
-- starts an ephemeral `anvil` instance automatically,
-- deploys and configures `MockContract` from Foundry artifacts,
-- encodes function calldata with `ox`,
-- executes a CREATE-style `eth_call` against Ghostcall,
-- dogfoods the provider-facing SDK aggregation helper,
-- decodes both function return data and revert data with `ox`,
-- verifies configurable success paths, calldata-vs-method precedence, inline failure entries, the empty-batch case, the CREATE request-size boundary, the CREATE return-size boundary, and top-level malformed-payload handling.
-
-For static TypeScript checking:
-
-```bash
-npm run typecheck
-```
-
-## Design notes
-
-The implementation chooses Yul over raw bytecode because it keeps the control flow legible while
-still mapping one-to-one onto the EVM concepts that matter here:
-
-- `dataoffset(...)` anchors the appended payload boundary
-- `codecopy` streams headers and calldata directly from the appended payload
-- the len-first header plus a `0x0a` scratch offset lets one `mload(0x00)` yield both calldata
-  length and the `CALL` address word without extra masking
-- `call` executes each subcall with zero value
-- `returndatacopy` packs the aggregate response into a compact binary format
-- `return` hands the batch result back to RPC
-
-That gives you a maintainable base version first, with a straightforward path to hand-optimizing
-hot spots later if initcode size becomes the bottleneck.
+The repository is hosted at [github.com/volga-sh/ghostcall](https://github.com/volga-sh/ghostcall).

@@ -11,7 +11,7 @@
 	"bugs": {
 		"url": "https://github.com/volga-sh/ghostcall/issues"
 	},
-	"homepage": "https://github.com/volga-sh/ghostcall#readme",
+	"homepage": "https://ghostcall.volga.sh",
 	"main": "./dist/sdk/index.js",
 	"types": "./dist/sdk/index.d.ts",
 	"exports": {
