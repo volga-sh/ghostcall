@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
 	balanceInputBytesPerCall,
+	createRawInitcodeSizeProbe,
+	createRawRuntimeReturnProbe,
 	encodeBalanceOfCalldata,
 	findLimit,
 	parseBenchmarkArgs,
@@ -211,6 +213,19 @@ test("benchmark limit helpers", async (t) => {
 			`0x70a08231${"0".repeat(24)}${ownerA.slice(2)}`,
 		);
 	});
+
+	await t.test("createRawInitcodeSizeProbe produces exact byte length", () => {
+		const probe = createRawInitcodeSizeProbe(10);
+		assert.equal((probe.length - 2) / 2, 10);
+	});
+
+	await t.test(
+		"createRawRuntimeReturnProbe uses the correct PUSH opcode",
+		() => {
+			assert.equal(createRawRuntimeReturnProbe(1), "0x60016000f3");
+			assert.equal(createRawRuntimeReturnProbe(256), "0x6101006000f3");
+		},
+	);
 
 	await t.test("rejects non-address owners in balanceOf calldata", () => {
 		assert.throws(

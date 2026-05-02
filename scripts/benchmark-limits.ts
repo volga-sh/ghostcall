@@ -99,6 +99,7 @@ let nextRpcId = 1;
  * @returns Either a help marker or the benchmark config.
  *
  * @throws {Error} If required balance-mode inputs are missing.
+ * @throws {TypeError} If `--from`, `--token`, or `--owner` are not 20-byte hex addresses.
  *
  * @example
  * const parsed = parseBenchmarkArgs([

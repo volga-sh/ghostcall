@@ -261,6 +261,7 @@ test("Ghostcall SDK", async (t) => {
 	await t.test(
 		"rejects failed decoded subcalls through aggregateDecodedCalls",
 		async () => {
+			const decodeResult = (returnData: `0x${string}`) => returnData;
 			const provider = {
 				async request(): Promise<unknown> {
 					return "0x0001ff";
@@ -272,12 +273,22 @@ test("Ghostcall SDK", async (t) => {
 					{
 						to: "0x1111111111111111111111111111111111111111",
 						data: "0x",
-						decodeResult: (returnData: `0x${string}`) => returnData,
+						decodeResult,
 					},
 				]),
 				(error: unknown) => {
 					assert.ok(error instanceof GhostcallSubcallError);
 					assert.equal(error.message, "Ghostcall subcall 0 failed");
+					assert.equal(error.index, 0);
+					assert.deepEqual(error.call, {
+						to: "0x1111111111111111111111111111111111111111",
+						data: "0x",
+						decodeResult,
+					});
+					assert.deepEqual(error.result, {
+						success: false,
+						returnData: "0xff",
+					});
 					return true;
 				},
 			);

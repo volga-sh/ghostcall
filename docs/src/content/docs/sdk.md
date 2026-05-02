@@ -130,7 +130,7 @@ async function aggregateDecodedCalls(
 	provider,
 	calls,
 	options?,
-): Promise<GhostcallDecodedResults>;
+): Promise<unknown[]>;
 ```
 
 `aggregateDecodedCalls()` uses the same transport flow as `aggregateCalls()`, but it is the strict decoded helper:
@@ -139,9 +139,13 @@ async function aggregateDecodedCalls(
 - its TypeScript input does not accept `allowFailure`
 - any failed subcall rejects with `GhostcallSubcallError`
 
+In TypeScript, the actual return type is inferred from the input call tuple and each call's `decodeResult` callback.
+
 Use it when you want decoded values directly:
 
 ```ts
+import { decodeFunctionResult, parseAbi } from "viem";
+
 const erc20Abi = parseAbi(["function totalSupply() view returns (uint256)"]);
 const weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 
