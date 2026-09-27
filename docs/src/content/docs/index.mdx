@@ -41,22 +41,22 @@ values in the same order.
 
 ```ts title="Listing 2.1 · TypeScript"
 import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
-import { balanceOf, totalSupply } from "./erc20";
+import { erc20Abi } from "viem";
 
 const token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const account = "0x28C6c06298d514Db089934071355E5743bf21d60";
-const balanceCall = balanceOf(account);
 
 const [supply, balance] = await aggregateDecodedCalls(provider, [
 	{
 		to: token,
-		data: totalSupply.data,
-		decodeResult: totalSupply.decodeReturn,
+		abi: erc20Abi,
+		functionName: "totalSupply",
 	},
 	{
 		to: token,
-		data: balanceCall.data,
-		decodeResult: balanceCall.decodeReturn,
+		abi: erc20Abi,
+		functionName: "balanceOf",
+		args: [account],
 	},
 ]);
 ```

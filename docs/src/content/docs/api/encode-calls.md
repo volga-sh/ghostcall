@@ -47,14 +47,19 @@ function encodeCalls(
 ### calls
 
 ```ts
+import type { Hex } from "@volga-sh/evm-ghostcall";
+
 type GhostcallCall = {
 	to: Hex;
 	data: Hex;
+	allowFailure?: boolean;
 };
 ```
 
 An ordered list of contract addresses and calldata. Each `to` value must be a
 20-byte address. Each `data` value must be even-length hex with a `0x` prefix.
+
+`allowFailure` only affects `aggregateCalls()` and is ignored during encoding.
 
 One call is encoded as:
 

@@ -15,7 +15,9 @@ ghostcall exports four functions, one error class, and their TypeScript types.
 | Parse a manually sent response | [`decodeResults()`](/api/decode-results/) |
 
 Use `aggregateDecodedCalls()` when every call must succeed and decoded values
-are needed. Use `aggregateCalls()` when some calls may fail or raw return data
+are needed. Pass `{ to, abi, functionName, args }` for automatic ABI handling,
+or `{ to, data, decodeResult }` for a custom decoder.
+Use `aggregateCalls()` with `{ to, data }` when some calls may fail or raw return data
 is needed. Use `encodeCalls()` and `decodeResults()` for manually sent RPC
 requests.
 

@@ -2,155 +2,88 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:net";
+import { setTimeout as sleep } from "node:timers/promises";
 
-import { type Hex, RpcTransport } from "ox";
+import { RpcTransport, type TransactionReceipt } from "ox";
+import type { Hex } from "../../src/sdk/index.ts";
 
 const defaultSender = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
-
-type RpcErrorObject = {
-	code: number;
-	message: string;
-	data?: unknown;
-};
-
-type RawRpcResponse<result> =
-	| {
-			id: number;
-			jsonrpc: "2.0";
-			result: result;
-	  }
-	| {
-			id: number;
-			jsonrpc: "2.0";
-			error: RpcErrorObject;
-	  };
 
 type Transport = RpcTransport.Http<false>;
 
 type AnvilInstance = {
 	child: ReturnType<typeof spawn>;
-	logs: string[];
 	transport: Transport;
-	url: string;
 };
 
-type StartAnvilOptions = {
+async function startAnvil({
+	args = [],
+}: {
 	args?: readonly string[];
-};
-
-async function startAnvil(
-	options: StartAnvilOptions = {},
-): Promise<AnvilInstance> {
+} = {}): Promise<AnvilInstance> {
 	const port = await getFreePort();
 	const url = `http://127.0.0.1:${port}`;
 	const logs: string[] = [];
 
 	const child = spawn(
 		"anvil",
-		["--host", "127.0.0.1", "--port", String(port), ...(options.args ?? [])],
+		["--host", "127.0.0.1", "--port", String(port), ...args],
 		{
 			stdio: ["ignore", "pipe", "pipe"],
 		},
 	);
 
-	child.stdout?.on("data", (chunk: Buffer | string) => {
-		logs.push(chunk.toString());
-	});
-	child.stderr?.on("data", (chunk: Buffer | string) => {
-		logs.push(chunk.toString());
-	});
+	for (const stream of [child.stdout, child.stderr]) {
+		stream.on("data", (chunk: Buffer | string) => logs.push(chunk.toString()));
+	}
 
 	const transport: Transport = RpcTransport.fromHttp(url);
 
 	try {
 		await waitForRpc(transport, child, logs);
 	} catch (error) {
-		await stopAnvil({ child, logs, transport, url });
+		await stopAnvil({ child, transport });
 		throw error;
 	}
 
-	return { child, logs, transport, url };
+	return { child, transport };
 }
 
 async function stopAnvil(anvil: AnvilInstance): Promise<void> {
-	if (anvil.child.exitCode !== null) {
+	const { child } = anvil;
+	if (child.exitCode !== null || child.signalCode !== null) {
 		return;
 	}
 
-	const exit = once(anvil.child, "exit");
-	anvil.child.kill("SIGTERM");
+	const exit = once(child, "exit");
+	child.kill("SIGTERM");
 
-	await Promise.race([exit, sleep(2_000)]);
+	// The fallback timer must not keep the test process alive after Anvil exits.
+	await Promise.race([exit, sleep(2_000, undefined, { ref: false })]);
 
-	if (anvil.child.exitCode === null) {
-		anvil.child.kill("SIGKILL");
+	if (child.exitCode === null && child.signalCode === null) {
+		child.kill("SIGKILL");
 		await exit;
 	}
 }
 
 async function deployContract(
 	transport: Transport,
-	bytecode: Hex.Hex,
-): Promise<Hex.Hex> {
-	const hash = (await transport.request({
-		method: "eth_sendTransaction",
-		params: [
-			{
-				from: defaultSender,
-				data: bytecode,
-			},
-		],
-	})) as Hex.Hex;
-
-	const receipt = await waitForReceipt(transport, hash);
-	assert.equal(typeof receipt.contractAddress, "string");
-	return receipt.contractAddress as Hex.Hex;
-}
-
-async function ethCall(
-	transport: Transport,
-	request: { to?: Hex.Hex; from?: Hex.Hex; data: Hex.Hex },
-): Promise<Hex.Hex> {
-	return (await transport.request({
-		method: "eth_call",
-		params: [request, "latest"],
-	})) as Hex.Hex;
-}
-
-async function ethCallCreate(
-	transport: Transport,
-	data: Hex.Hex,
-): Promise<Hex.Hex> {
-	return ethCall(transport, {
-		from: defaultSender,
-		data,
-	});
-}
-
-async function ethCallCreateRaw(
-	transport: Transport,
-	data: Hex.Hex,
-): Promise<RawRpcResponse<Hex.Hex>> {
-	return (await transport.request(
-		{
-			method: "eth_call",
-			params: [
-				{
-					from: defaultSender,
-					data,
-				},
-				"latest",
-			],
-		},
-		{ raw: true },
-	)) as RawRpcResponse<Hex.Hex>;
+	bytecode: Hex,
+): Promise<Hex> {
+	const receipt = await sendTransaction(transport, { data: bytecode });
+	assert.ok(
+		receipt.contractAddress,
+		"Deployment receipt is missing its contract address",
+	);
+	return receipt.contractAddress;
 }
 
 async function sendTransaction(
 	transport: Transport,
-	request: { to?: Hex.Hex; data: Hex.Hex },
-): Promise<Hex.Hex> {
-	const hash = (await transport.request({
+	request: { to?: Hex; data: Hex },
+): Promise<TransactionReceipt.Rpc> {
+	const hash = await transport.request({
 		method: "eth_sendTransaction",
 		params: [
 			{
@@ -158,16 +91,16 @@ async function sendTransaction(
 				...request,
 			},
 		],
-	})) as Hex.Hex;
+	});
 
 	const receipt = await waitForReceipt(transport, hash);
-	assert.notEqual(
+	assert.equal(
 		receipt.status,
-		"0x0",
+		"0x1",
 		`Transaction ${hash} reverted unexpectedly`,
 	);
 
-	return hash;
+	return receipt;
 }
 
 async function waitForRpc(
@@ -197,15 +130,15 @@ async function waitForRpc(
 
 async function waitForReceipt(
 	transport: Transport,
-	hash: Hex.Hex,
-): Promise<{ contractAddress?: string | null; status?: string | null }> {
+	hash: Hex,
+): Promise<TransactionReceipt.Rpc> {
 	const timeoutAt = Date.now() + 10_000;
 
 	while (Date.now() < timeoutAt) {
-		const receipt = (await transport.request({
+		const receipt = await transport.request({
 			method: "eth_getTransactionReceipt",
 			params: [hash],
-		})) as { contractAddress?: string | null; status?: string | null } | null;
+		});
 
 		if (receipt) {
 			return receipt;
@@ -218,49 +151,18 @@ async function waitForReceipt(
 }
 
 async function getFreePort(): Promise<number> {
-	return await new Promise((resolve, reject) => {
-		const server = createServer();
-
-		server.on("error", reject);
-		server.listen(0, "127.0.0.1", () => {
-			const address = server.address();
-			if (address === null || typeof address === "string") {
-				reject(new Error("Could not determine a free TCP port"));
-				return;
-			}
-
-			server.close((error) => {
-				if (error) {
-					reject(error);
-					return;
-				}
-
-				resolve(address.port);
-			});
-		});
-	});
+	const server = createServer().listen(0, "127.0.0.1");
+	await once(server, "listening");
+	const address = server.address();
+	const closed = once(server, "close");
+	server.close();
+	await closed;
+	assert.ok(
+		address && typeof address !== "string",
+		"Could not determine a free TCP port",
+	);
+	return address.port;
 }
 
-function sleep(milliseconds: number): Promise<void> {
-	return new Promise((resolve) => {
-		setTimeout(resolve, milliseconds);
-	});
-}
-
-export type {
-	AnvilInstance,
-	RawRpcResponse,
-	RpcErrorObject,
-	StartAnvilOptions,
-	Transport,
-};
-export {
-	defaultSender,
-	deployContract,
-	ethCall,
-	ethCallCreate,
-	ethCallCreateRaw,
-	sendTransaction,
-	startAnvil,
-	stopAnvil,
-};
+export type { Transport };
+export { deployContract, sendTransaction, startAnvil, stopAnvil };

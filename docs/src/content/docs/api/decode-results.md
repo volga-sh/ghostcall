@@ -32,7 +32,7 @@ function decodeResults(data: Hex): GhostcallResult[];
 ### data
 
 ```ts
-type Hex = `0x${string}`;
+import type { Hex } from "@volga-sh/evm-ghostcall";
 ```
 
 The raw hex returned by the outer `eth_call`.
