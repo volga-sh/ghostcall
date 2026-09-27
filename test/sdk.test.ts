@@ -1,406 +1,233 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
+import { size as hexSize } from "ox/Hex";
 import {
 	aggregateCalls,
 	aggregateDecodedCalls,
 	decodeResults,
 	encodeCalls,
+	type GhostcallAggregateOptions,
+	type GhostcallCall,
+	type GhostcallDecodedCall,
 	GhostcallSubcallError,
+	type Hex,
 } from "../src/sdk/index.ts";
 
-const maxCreateInitcodeSize = 0xc000;
-const encodedCallHeaderSize = 0x16;
-const optimizedBundledInitcodeSize = 91;
+const call = {
+	to: "0x1111111111111111111111111111111111111111",
+	data: "0x",
+} satisfies GhostcallCall;
+const providerReturning = (
+	result: unknown,
+): Parameters<typeof aggregateCalls>[0] => ({ request: async () => result });
 
-test("Ghostcall SDK", async (t) => {
-	await t.test("supports empty call lists and custom initcode ceilings", () => {
-		const data = encodeCalls([]);
-		const bundledInitcodeSize = byteLength(data);
-
-		assert.match(data, /^0x[0-9a-fA-F]+$/);
-		assert.notEqual(data, "0x");
-		assert.throws(
-			() => encodeCalls([], { maxInitcodeBytes: bundledInitcodeSize - 1 }),
-			RangeError,
-		);
-	});
-
-	await t.test("pins the bundled optimized initcode size", () => {
-		assert.equal(byteLength(encodeCalls([])), optimizedBundledInitcodeSize);
-	});
-
-	await t.test("encodes calldata at the uint16 limit", () => {
-		const baseData = encodeCalls([]);
-		const maxSizedCall = {
-			to: "0x1111111111111111111111111111111111111111",
-			data: `0x${"00".repeat(0xffff)}` as `0x${string}`,
-		} as const;
-		const maxInitcodeBytes =
-			(baseData.length - 2) / 2 + encodedCallHeaderSize + 0xffff;
-
-		const encoded = encodeCalls([maxSizedCall], { maxInitcodeBytes });
-
-		assert.equal(
-			(encoded.length - 2) / 2,
-			(baseData.length - 2) / 2 + encodedCallHeaderSize + 0xffff,
-		);
-	});
-
-	await t.test(
-		"encodes single and multi-call payloads with len-first headers",
-		() => {
-			const baseData = encodeCalls([]);
-			const firstCall = {
-				to: "0x1111111111111111111111111111111111111111",
-				data: "0xaabb",
-			} as const;
-			const secondCall = {
-				to: "0x2222222222222222222222222222222222222222",
-				data: "0x",
-			} as const;
-
-			assert.equal(
-				encodeCalls([firstCall]),
-				`${baseData}0002${firstCall.to.slice(2)}aabb`,
-			);
-			assert.equal(
-				encodeCalls([firstCall, secondCall]),
-				`${baseData}0002${firstCall.to.slice(2)}aabb0000${secondCall.to.slice(2)}`,
-			);
-		},
-	);
-
-	await t.test("rejects invalid addresses", () => {
-		assert.throws(
-			() =>
-				encodeCalls([
-					{
-						to: "0x1234" as const,
-						data: "0x",
-					},
-				]),
-			TypeError,
-		);
-		assert.throws(
-			() =>
-				encodeCalls([
-					{
-						to: "0xzz11111111111111111111111111111111111111" as const,
-						data: "0x",
-					},
-				]),
-			TypeError,
-		);
-	});
-
-	await t.test("rejects invalid calldata hex", () => {
-		assert.throws(
-			() =>
-				encodeCalls([
-					{
-						to: "0x1111111111111111111111111111111111111111",
-						data: "1234" as unknown as `0x${string}`,
-					},
-				]),
-			TypeError,
-		);
-		assert.throws(
-			() =>
-				encodeCalls([
-					{
-						to: "0x1111111111111111111111111111111111111111",
-						data: "0xabc" as const,
-					},
-				]),
-			TypeError,
-		);
-		assert.throws(
-			() =>
-				encodeCalls([
-					{
-						to: "0x1111111111111111111111111111111111111111",
-						data: "0xzz" as const,
-					},
-				]),
-			TypeError,
-		);
-	});
-
-	await t.test("rejects calldata over the uint16 limit", () => {
-		assert.throws(
-			() =>
-				encodeCalls([
-					{
-						to: "0x1111111111111111111111111111111111111111",
-						data: `0x${"00".repeat(0x10000)}` as `0x${string}`,
-					},
-				]),
-			RangeError,
-		);
-	});
-
-	await t.test("enforces the CREATE initcode size limit", () => {
-		const baseData = encodeCalls([]);
-		const emptyCall = {
-			to: "0x1111111111111111111111111111111111111111",
-			data: "0x",
-		} as const;
-		const bundledInitcodeSize = (baseData.length - 2) / 2;
-		const maxEmptyCalls = Math.floor(
-			(maxCreateInitcodeSize - bundledInitcodeSize) / encodedCallHeaderSize,
-		);
-
-		const maxSizedBatch = Array.from(
-			{ length: maxEmptyCalls },
-			() => emptyCall,
-		);
-		const maxSizedData = encodeCalls(maxSizedBatch, {
-			maxInitcodeBytes: maxCreateInitcodeSize,
-		});
-
-		assert.ok((maxSizedData.length - 2) / 2 <= maxCreateInitcodeSize);
-		assert.throws(
-			() =>
-				encodeCalls([...maxSizedBatch, emptyCall], {
-					maxInitcodeBytes: maxCreateInitcodeSize,
-				}),
-			RangeError,
-		);
-	});
-
-	await t.test("decodes empty and mixed result payloads", () => {
-		assert.deepEqual(decodeResults("0x"), []);
-		assert.deepEqual(decodeResults("0x8002cafe0003deadbe"), [
-			{ success: true, returnData: "0xcafe" },
-			{ success: false, returnData: "0xdeadbe" },
-		]);
-	});
-
-	await t.test("rejects truncated result headers and bodies", () => {
-		assert.throws(() => decodeResults("0x00"), TypeError);
-		assert.throws(() => decodeResults("0x8002ff"), TypeError);
-	});
-
-	await t.test(
-		"forwards CREATE-style eth_call params and returns raw results",
-		async () => {
-			const calls = [
-				{
-					to: "0x1111111111111111111111111111111111111111",
-					data: "0xaabb",
-				},
-				{
-					to: "0x2222222222222222222222222222222222222222",
-					data: "0x",
-					allowFailure: true,
-				},
-			] as const;
-			const requests: unknown[] = [];
-			const provider = {
-				async request(args: {
-					method: string;
-					params?: unknown;
-				}): Promise<unknown> {
-					requests.push(args);
-					return "0x8001aa0001bb";
-				},
-			};
-
-			const results = await aggregateCalls(provider, calls, {
-				ethCall: {
-					from: "0x3333333333333333333333333333333333333333",
-					gas: "0x5208",
-					blockTag: 123,
-				},
-			});
-
-			assert.deepEqual(requests, [
-				{
-					method: "eth_call",
-					params: [
-						{
-							data: encodeCalls(calls),
-							from: "0x3333333333333333333333333333333333333333",
-							gas: "0x5208",
-						},
-						"0x7b",
-					],
-				},
-			]);
-			assert.deepEqual(results, [
-				{ success: true, returnData: "0xaa" },
-				{ success: false, returnData: "0xbb" },
-			]);
-		},
-	);
-
-	await t.test(
-		"returns decoded values directly through aggregateDecodedCalls",
-		async () => {
-			const calls = [
-				{
-					to: "0x1111111111111111111111111111111111111111",
-					data: "0xaabb",
-					decodeResult: (returnData: `0x${string}`) =>
-						Number.parseInt(returnData.slice(2), 16),
-				},
-				{
-					to: "0x2222222222222222222222222222222222222222",
-					data: "0xccdd",
-					decodeResult: (returnData: `0x${string}`) => returnData.toUpperCase(),
-				},
-			] as const;
-			const provider = {
-				async request(): Promise<unknown> {
-					return "0x80012a8002babe";
-				},
-			};
-
-			const results = await aggregateDecodedCalls(provider, calls);
-
-			assert.deepEqual(results, [42, "0XBABE"]);
-		},
-	);
-
-	await t.test(
-		"rejects failed decoded subcalls through aggregateDecodedCalls",
-		async () => {
-			const decodeResult = (returnData: `0x${string}`) => returnData;
-			const provider = {
-				async request(): Promise<unknown> {
-					return "0x0001ff";
-				},
-			};
-
-			await assert.rejects(
-				aggregateDecodedCalls(provider, [
-					{
-						to: "0x1111111111111111111111111111111111111111",
-						data: "0x",
-						decodeResult,
-					},
-				]),
-				(error: unknown) => {
-					assert.ok(error instanceof GhostcallSubcallError);
-					assert.equal(error.message, "Ghostcall subcall 0 failed");
-					assert.equal(error.index, 0);
-					assert.deepEqual(error.call, {
-						to: "0x1111111111111111111111111111111111111111",
-						data: "0x",
-						decodeResult,
-					});
-					assert.deepEqual(error.result, {
-						success: false,
-						returnData: "0xff",
-					});
-					return true;
-				},
-			);
-		},
-	);
-
-	await t.test(
-		"rejects failed subcalls unless allowFailure is set",
-		async () => {
-			const provider = {
-				async request(): Promise<unknown> {
-					return "0x0001ff";
-				},
-			};
-
-			await assert.rejects(
-				aggregateCalls(provider, [
-					{
-						to: "0x1111111111111111111111111111111111111111",
-						data: "0x",
-					},
-				]),
-				(error: unknown) => {
-					assert.ok(error instanceof GhostcallSubcallError);
-					assert.equal(error.message, "Ghostcall subcall 0 failed");
-					assert.equal(error.index, 0);
-					assert.deepEqual(error.call, {
-						to: "0x1111111111111111111111111111111111111111",
-						data: "0x",
-					});
-					assert.deepEqual(error.result, {
-						success: false,
-						returnData: "0xff",
-					});
-					return true;
-				},
-			);
-		},
-	);
-
-	await t.test("rejects malformed aggregate provider results", async () => {
-		const call = {
-			to: "0x1111111111111111111111111111111111111111",
-			data: "0x",
-		} as const;
-		const nonHexProvider = {
-			async request(): Promise<unknown> {
-				return 123;
-			},
-		};
-		const missingEntryProvider = {
-			async request(): Promise<unknown> {
-				return "0x";
-			},
-		};
-
-		await assert.rejects(
-			aggregateCalls(nonHexProvider, [call]),
-			/eth_call result must be a hex string/,
-		);
-		await assert.rejects(
-			aggregateCalls(missingEntryProvider, [call]),
-			/Ghostcall returned 0 result entries for 1 calls/,
-		);
-	});
-
-	await t.test(
-		"rejects invalid outer eth_call options before RPC",
-		async () => {
-			const call = {
-				to: "0x1111111111111111111111111111111111111111",
-				data: "0x",
-			} as const;
-			const provider = {
-				async request(): Promise<unknown> {
-					assert.fail("invalid eth_call options should not reach the provider");
-				},
-			};
-
-			await assert.rejects(
-				aggregateCalls(provider, [call], {
-					ethCall: { from: "0x1234" as const },
-				}),
-				/options\.ethCall\.from must be a 20-byte hex string/,
-			);
-			await assert.rejects(
-				aggregateCalls(provider, [call], {
-					ethCall: { gas: "123" as never },
-				}),
-				/options\.ethCall\.gas must be a 0x-prefixed hex quantity/,
-			);
-			await assert.rejects(
-				aggregateCalls(provider, [call], {
-					ethCall: { blockTag: -1 as never },
-				}),
-				/options\.ethCall\.blockTag must be a non-negative safe integer, bigint, or non-empty string/,
-			);
-			await assert.rejects(
-				aggregateCalls(provider, [call], {
-					ethCall: { blockTag: "" },
-				}),
-				/options\.ethCall\.blockTag must be a non-negative safe integer, bigint, or non-empty string/,
-			);
-		},
+test("encodes ordered uint16-length/address/calldata entries after the initcode", () => {
+	const base = encodeCalls([]);
+	const first = { ...call, data: "0xaabb" } satisfies GhostcallCall;
+	const second = {
+		to: "0x2222222222222222222222222222222222222222",
+		data: "0x",
+	} satisfies GhostcallCall;
+	assert.equal(encodeCalls([first]), `${base}0002${first.to.slice(2)}aabb`);
+	assert.equal(
+		encodeCalls([first, second]),
+		`${base}0002${first.to.slice(2)}aabb0000${second.to.slice(2)}`,
 	);
 });
 
-function byteLength(value: `0x${string}`): number {
-	return (value.length - 2) / 2;
-}
+test("enforces calldata and full CREATE request ceilings at their boundaries", () => {
+	const baseSize = hexSize(encodeCalls([]));
+	const maxSizedCall = {
+		...call,
+		data: `0x${"00".repeat(0xffff)}`,
+	} satisfies GhostcallCall;
+	const maxInitcodeBytes = baseSize + 22 + 0xffff;
+	assert.equal(
+		hexSize(encodeCalls([maxSizedCall], { maxInitcodeBytes })),
+		maxInitcodeBytes,
+	);
+	assert.throws(
+		() =>
+			encodeCalls([maxSizedCall], { maxInitcodeBytes: maxInitcodeBytes - 1 }),
+		RangeError,
+	);
+	assert.throws(
+		() =>
+			encodeCalls([{ ...call, data: `${maxSizedCall.data}00` }], {
+				maxInitcodeBytes: maxInitcodeBytes + 1,
+			}),
+		/65535-byte calldata limit/,
+	);
+	assert.throws(
+		() => encodeCalls([], { maxInitcodeBytes: baseSize - 1 }),
+		RangeError,
+	);
+	for (const maxInitcodeBytes of [-1, 1.5, NaN, Infinity]) {
+		assert.throws(() => encodeCalls([], { maxInitcodeBytes }), TypeError);
+	}
+	const batch = Array.from(
+		{ length: Math.floor((0xc000 - baseSize) / 22) },
+		() => call,
+	);
+	assert.ok(hexSize(encodeCalls(batch)) <= 0xc000);
+	assert.throws(() => encodeCalls([...batch, call]), RangeError);
+});
+
+test("rejects malformed caller hex and addresses", () => {
+	const invalid: unknown[] = [
+		{ ...call, to: "0x1234" },
+		{ ...call, to: `0xzz${"11".repeat(19)}` },
+		{ ...call, to: 123 },
+		...["1234", "0xabc", "0xzz", "0x00\n", 123].map((data) => ({
+			...call,
+			data,
+		})),
+	];
+	// Exercise the untyped boundary; valid fixtures are checked with satisfies.
+	for (const input of invalid)
+		assert.throws(() => encodeCalls([input as GhostcallCall]), TypeError);
+});
+
+test("decodes ordered successes and failures, rejecting malformed or truncated responses", () => {
+	assert.deepEqual(decodeResults("0x"), []);
+	assert.deepEqual(decodeResults("0x8002cafe0003deadbe8000"), [
+		{ success: true, returnData: "0xcafe" },
+		{ success: false, returnData: "0xdeadbe" },
+		{ success: true, returnData: "0x" },
+	]);
+	for (const data of [
+		"0x00",
+		"0x8002ff",
+		"0x8000ff",
+		"0xabc",
+		"0xzz",
+	] as const) {
+		assert.throws(() => decodeResults(data), TypeError);
+	}
+});
+
+test("forwards CREATE-style eth_call options and preserves raw failure entries", async (t) => {
+	const calls = [call, { ...call, allowFailure: true }];
+	const request = t.mock.fn<Parameters<typeof aggregateCalls>[0]["request"]>(
+		async () => "0x8001aa0001bb",
+	);
+	const results = await aggregateCalls({ request }, calls, {
+		ethCall: { from: call.to, gas: "0x5208", blockTag: 123 },
+	});
+	assert.equal(request.mock.callCount(), 1);
+	assert.deepEqual(request.mock.calls[0]?.arguments, [
+		{
+			method: "eth_call",
+			params: [
+				{ data: encodeCalls(calls), from: call.to, gas: "0x5208" },
+				"0x7b",
+			],
+		},
+	]);
+	assert.deepEqual(results, [
+		{ success: true, returnData: "0xaa" },
+		{ success: false, returnData: "0xbb" },
+	]);
+});
+
+test("decodes custom results with their successful entry and batch index", async (t) => {
+	const decode = t.mock.fn((data: Hex) => Number.parseInt(data.slice(2), 16));
+	const calls = [
+		{ ...call, decodeResult: decode },
+		{ ...call, decodeResult: (data) => data.toUpperCase() },
+	] as const satisfies readonly GhostcallDecodedCall[];
+	assert.deepEqual(
+		await aggregateDecodedCalls(providerReturning("0x80012a8002babe"), calls),
+		[42, "0XBABE"],
+	);
+	assert.deepEqual(decode.mock.calls[0]?.arguments, [
+		"0x2a",
+		{ success: true, returnData: "0x2a" },
+		0,
+	]);
+});
+
+test("failed calls never reach success decoders, including hidden allowFailure fields", async (t) => {
+	const provider = providerReturning("0x00012a");
+	const decodeResult = t.mock.fn(() => 42);
+	await assert.rejects(aggregateCalls(provider, [call]), GhostcallSubcallError);
+	await assert.rejects(
+		aggregateDecodedCalls(provider, [{ ...call, decodeResult }]),
+		GhostcallSubcallError,
+	);
+	const original = { ...call, decodeResult, allowFailure: true };
+	// Structural typing can hide an extra field without removing it at runtime (P1).
+	const erased: Omit<GhostcallCall, "allowFailure"> & {
+		decodeResult: typeof decodeResult;
+	} = original;
+	await assert.rejects(
+		aggregateDecodedCalls(provider, [erased]),
+		(error: unknown) => {
+			assert.ok(error instanceof GhostcallSubcallError);
+			assert.equal(error.index, 0);
+			assert.equal(error.call, original);
+			assert.deepEqual(error.result, { success: false, returnData: "0x2a" });
+			return true;
+		},
+	);
+	assert.equal(decodeResult.mock.callCount(), 0);
+});
+
+test("rejects invalid provider responses and mismatched result counts", async () => {
+	for (const response of [123, "0xzz", "0x00", "0x8002ff"]) {
+		await assert.rejects(
+			aggregateCalls(providerReturning(response), [call]),
+			TypeError,
+		);
+	}
+	for (const response of ["0x", "0x80008000"]) {
+		await assert.rejects(
+			aggregateCalls(providerReturning(response), [call]),
+			/result entries for 1 calls/,
+		);
+	}
+});
+
+test("normalizes block references and rejects invalid outer options before RPC", async (t) => {
+	const request = t.mock.fn<Parameters<typeof aggregateCalls>[0]["request"]>(
+		async () => "0x",
+	);
+	for (const [blockTag, expected] of [
+		[0, "0x0"],
+		[123n, "0x7b"],
+		["00123", "0x7b"],
+		["0XAb", "0xAb"],
+		["pending", "pending"],
+	] as const) {
+		await aggregateCalls({ request }, [], { ethCall: { blockTag } });
+		assert.deepEqual(request.mock.calls.at(-1)?.arguments[0]?.params, [
+			{ data: encodeCalls([]) },
+			expected,
+		]);
+	}
+	request.mock.resetCalls();
+	const invalid: unknown[] = [
+		{ from: "0x1234" },
+		...["123", "0x00", "0x", -1].map((gas) => ({ gas })),
+		...[
+			-1,
+			-1n,
+			"-0",
+			"",
+			"0x00",
+			1.5,
+			NaN,
+			Infinity,
+			Number.MAX_SAFE_INTEGER + 1,
+		].map((blockTag) => ({ blockTag })),
+	];
+	for (const ethCall of invalid) {
+		await assert.rejects(
+			aggregateCalls({ request }, [call], {
+				ethCall,
+			} as GhostcallAggregateOptions),
+			TypeError,
+		);
+	}
+	assert.equal(request.mock.callCount(), 0);
+});

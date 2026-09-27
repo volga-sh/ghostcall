@@ -14,8 +14,8 @@ npm install @volga-sh/evm-ghostcall viem
 
 ghostcall accepts any provider with a `request` method compatible with
 [EIP‑1193](https://eips.ethereum.org/EIPS/eip-1193). A provider sends JSON-RPC
-requests to an EVM node. This guide uses viem for the provider and for ABI
-encoding and decoding. Ethers, ox, and custom ABI helpers also work.
+requests to an EVM node. This guide uses viem for the provider and ABI
+definition. ghostcall uses ox to encode arguments and decode results.
 
 ## 2. Create a client
 
@@ -34,11 +34,11 @@ is required.
 
 ## 3. Describe the reads
 
-An ABI tells viem how to turn function names and arguments into calldata.
+An ABI tells ghostcall how to turn function names and arguments into calldata.
 Calldata is the hex data sent to a contract function.
 
 ```ts
-import { decodeFunctionResult, encodeFunctionData, parseAbi } from "viem";
+import { parseAbi } from "viem";
 
 const erc20Abi = parseAbi([
 	"function balanceOf(address account) view returns (uint256)",
@@ -52,8 +52,8 @@ const spender = "0xE592427A0AEce92De3Edee1F18E0157C05861564";
 
 ## 4. Send the batch
 
-Each entry contains a target address, its calldata, and a function that decodes
-the returned hex data.
+Each entry declares its target, ABI, function name, and arguments once. The
+same function definition handles both encoding and decoding.
 
 ```ts
 import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
@@ -61,31 +61,15 @@ import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
 const [balance, allowance] = await aggregateDecodedCalls(client, [
 	{
 		to: usdc,
-		data: encodeFunctionData({
-			abi: erc20Abi,
-			functionName: "balanceOf",
-			args: [owner],
-		}),
-		decodeResult: (data) =>
-			decodeFunctionResult({
-				abi: erc20Abi,
-				functionName: "balanceOf",
-				data,
-			}),
+		abi: erc20Abi,
+		functionName: "balanceOf",
+		args: [owner],
 	},
 	{
 		to: usdc,
-		data: encodeFunctionData({
-			abi: erc20Abi,
-			functionName: "allowance",
-			args: [owner, spender],
-		}),
-		decodeResult: (data) =>
-			decodeFunctionResult({
-				abi: erc20Abi,
-				functionName: "allowance",
-				data,
-			}),
+		abi: erc20Abi,
+		functionName: "allowance",
+		args: [owner, spender],
 	},
 ]);
 
@@ -94,6 +78,13 @@ console.log({ balance, allowance });
 
 `balance` and `allowance` are inferred as `bigint`. Their order matches the call
 order.
+
+Function names and argument types are checked against the ABI. Use a literal
+ABI (`as const`), viem's `parseAbi`, or ox's `Abi.from` to preserve inference.
+ABIs loaded dynamically still work, but their results have type `unknown`.
+
+For already-encoded calldata, pass `{ to, data }` to `aggregateCalls()`. To
+decode raw calls, pass `{ to, data, decodeResult }` to `aggregateDecodedCalls()`.
 
 If either contract call fails, `aggregateDecodedCalls()` throws a
 [`GhostcallSubcallError`](/api/subcall-error/). Use a recipe from the next page

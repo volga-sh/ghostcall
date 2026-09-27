@@ -35,7 +35,8 @@ npm run check:sdk:initcode   # Verify generated initcode is up to date
 ### Core Structure
 
 - `src/Ghostcall.yul` is the source of truth for protocol semantics, payload parsing, result packing, and CREATE-return constraints.
-- `src/sdk/index.ts` is a thin translation layer over the wire format. It should stay provider-agnostic and hex-oriented.
+- `src/sdk/index.ts` owns the wire-format and batching APIs. Keep it provider-agnostic and keep raw calldata APIs available.
+- `src/sdk/abi.ts` connects ABI-described calls to the wire-format layer. Reuse ox's ABI encoding, decoding, and types rather than implementing a separate codec.
 - `scripts/generate-sdk-initcode.mjs` derives the bundled initcode from the Foundry artifact. Fix generation issues in the source or generator, not in the generated file.
 - `test/support/` contains RPC, Anvil, ABI, and artifact helpers for integration tests.
 - `README.md` documents the public protocol and SDK contract. If public semantics change, update it.
@@ -112,6 +113,7 @@ Tests in this repository are real execution tests, not abstract unit exercises.
 - Use strict typing and avoid `any`.
 - Prefer `type` aliases unless an `interface` is clearly better.
 - Exported functions should have explicit return types.
+- Define and export shared primitive types such as `Hex` in the SDK; examples and tests should import them from ghostcall.
 - Keep exports grouped at the end of hand-written TypeScript files instead of scattering `export` keywords through declarations. Generated files may follow their generator's output shape.
 - Use runtime validation at string and wire boundaries, where TypeScript cannot protect callers.
 - Do not add runtime checks for typed internal invariants that TypeScript already proves, such as required callbacks or disallowed fields within SDK-only control flow.
@@ -127,7 +129,7 @@ Tests in this repository are real execution tests, not abstract unit exercises.
 
 ### SDK Boundary Pattern
 
-The public SDK should continue to accept and return raw `0x`-prefixed hex strings. Provider integration, ABI decoding, and higher-level call policy belong to callers.
+The wire-format APIs accept and return raw `0x`-prefixed hex strings. The decoded batch API also accepts ABI-described calls, with argument and result types inferred from the same function definition. Keep ABI-described and raw call forms explicit, and preserve support for custom decoders.
 
 ### Validation Pattern
 

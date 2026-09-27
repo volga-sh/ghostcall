@@ -1,139 +1,93 @@
 ---
 title: aggregateDecodedCalls
-description: Send a batch and decode every successful result.
+description: Describe ABI calls once and receive typed decoded results.
 ---
 
 `aggregateDecodedCalls()` sends one `eth_call` and returns one decoded value for
-each input call. Results keep the same order as the calls.
+each input call. Results keep the same order as the calls. Every call must
+succeed; a failed call throws `GhostcallSubcallError`.
 
-Every call must succeed. If one fails, the function throws
-`GhostcallSubcallError`.
+## ABI calls
 
-## Usage
+Declare each ABI, function name, and argument list once. ghostcall uses ox to
+resolve that function, encode its arguments, and decode its result.
 
 ```ts
 import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
-import {
-	decodeFunctionResult,
-	encodeFunctionData,
-	parseAbi,
-} from "viem";
+import { erc20Abi } from "viem";
 
-const abi = parseAbi([
-	"function totalSupply() view returns (uint256)",
-	"function decimals() view returns (uint8)",
-]);
 const token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+const owner = "0x28C6c06298d514Db089934071355E5743bf21d60";
 
-const [totalSupply, decimals] = await aggregateDecodedCalls(client, [
+const [totalSupply, balance, decimals] = await aggregateDecodedCalls(client, [
+	{ to: token, abi: erc20Abi, functionName: "totalSupply" },
+	{ to: token, abi: erc20Abi, functionName: "balanceOf", args: [owner] },
+	{ to: token, abi: erc20Abi, functionName: "decimals" },
+]);
+// totalSupply: bigint, balance: bigint, decimals: number
+```
+
+Function names and arguments are checked against the ABI. `args` is required
+when the chosen function has inputs; zero-input functions may omit it or use
+`args: []`. No return-type annotations or casts are needed.
+
+Use literal JSON ABIs with `as const`, viem's `parseAbi`, or ox's `Abi.from` to
+retain type inference. A broadly typed ABI loaded at runtime produces `unknown`
+results and is validated during encoding.
+
+Overloaded functions are resolved using the supplied arguments. Encoding and
+decoding use the same resolved function. If ox reports ambiguous overloads,
+pass an ABI containing the specific overload you intend to call.
+
+One output becomes a scalar; multiple outputs form an ordered tuple. A function
+with no outputs returns `undefined`. These are ox's decoding conventions.
+
+## Raw calls with custom decoders
+
+Already-encoded calldata remains supported. Supply `data` and `decodeResult`
+for those entries. Raw and ABI-described entries can share a batch:
+
+```ts
+const [totalSupply, customValue] = await aggregateDecodedCalls(client, [
+	{ to: token, abi: erc20Abi, functionName: "totalSupply" },
 	{
-		to: token,
-		data: encodeFunctionData({
-			abi,
-			functionName: "totalSupply",
-		}),
-		decodeResult: (data) =>
-			decodeFunctionResult({
-				abi,
-				functionName: "totalSupply",
-				data,
-			}),
-	},
-	{
-		to: token,
-		data: encodeFunctionData({
-			abi,
-			functionName: "decimals",
-		}),
-		decodeResult: (data) =>
-			decodeFunctionResult({
-				abi,
-				functionName: "decimals",
-				data,
-			}),
+		to: customContract,
+		data: "0x12345678",
+		decodeResult: (returnData) => BigInt(returnData),
 	},
 ]);
+// [bigint, bigint]
 ```
 
-## Signature
+A custom decoder receives `(returnData, entry, index)`, with a successful raw
+result entry and its zero-based position. Its return type determines that
+position's result type. Decoder errors pass through unchanged.
 
-```ts
-async function aggregateDecodedCalls<
-	const TCalls extends readonly GhostcallDecodedCall<unknown>[],
->(
-	provider: EIP1193ProviderWithRequestFn,
-	calls: TCalls,
-	options?: GhostcallAggregateOptions,
-): Promise<GhostcallDecodedResults<TCalls>>;
-```
+Each entry uses either ABI fields or raw calldata with a decoder. TypeScript
+rejects entries mixing these fields, and neither form accepts `allowFailure`.
+Use [`aggregateCalls()`](/api/aggregate-calls/) for raw `{ to, data }` calls and
+optional failures.
 
-## Parameters
+## Provider and options
 
-### provider
+The provider needs an EIP-1193-compatible `request` method. A viem public client,
+an ox transport, or a compatible custom provider works.
 
-```ts
-type EIP1193ProviderWithRequestFn = {
-	request(args: { method: string; params?: unknown }): Promise<unknown>;
-};
-```
+See [`GhostcallAggregateOptions`](/api/types/#aggregate-options) for the shared options.
 
-The provider that sends the outer `eth_call`. A viem public client has this
-`request` method.
+`blockTag` defaults to `"latest"`. `maxInitcodeBytes` defaults to `49,152` bytes,
+including the initcode and all encoded call entries. Options apply to the whole
+batch. Execution still uses zero-value `CALL`; non-view functions may modify
+simulated state for later calls, as described in [Protocol](/protocol/).
 
-### calls
+## Errors
 
-```ts
-type GhostcallDecodedCall<TResult = unknown> = {
-	to: Hex;
-	data: Hex;
-	decodeResult: GhostcallResultDecoder<TResult>;
-};
+- ABI resolution and encoding errors occur before RPC. ox errors pass through.
+- Invalid addresses, calldata, options, or provider responses throw `TypeError`.
+- Requests exceeding a protocol or configured size limit throw `RangeError`.
+- Failed calls throw [`GhostcallSubcallError`](/api/subcall-error/), including
+  their raw revert data.
+- A response with a different entry count throws `Error`.
 
-type GhostcallResultDecoder<TResult> = (
-	returnData: Hex,
-	entry: GhostcallSuccessResult,
-	index: number,
-) => TResult;
-```
-
-An ordered list of contract calls. `to` is the contract address, `data` is the
-contract calldata, and `decodeResult` decodes successful return data.
-
-This call type does not accept `allowFailure`.
-
-### options
-
-```ts
-type GhostcallAggregateOptions = {
-	maxInitcodeBytes?: number;
-	ethCall?: {
-		from?: Hex;
-		gas?: HexQuantity;
-		blockTag?: string | number | bigint;
-	};
-};
-```
-
-`blockTag` defaults to `"latest"`. `maxInitcodeBytes` defaults to `49,152`, the
-Ethereum initcode limit.
-
-## Returns
-
-```ts
-Promise<GhostcallDecodedResults<TCalls>>
-```
-
-A tuple whose value types come from the `decodeResult` functions.
-
-## Throws
-
-- `TypeError` for invalid addresses, hex data, options, or provider responses.
-- `RangeError` when one call or the full request exceeds its size limit.
-- [`GhostcallSubcallError`](/api/subcall-error/) when any contract call fails.
-- `Error` when the response contains a different number of results than the
-  request.
-
-Provider and transport errors pass through unchanged.
-
-Use [`aggregateCalls()`](/api/aggregate-calls/) when a failed call should remain
-in the returned results.
+Provider, transport, and result-decoding errors pass through unchanged. For ABI
+calls, a subcall error's `call` field contains the prepared raw calldata.

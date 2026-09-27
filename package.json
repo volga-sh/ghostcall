@@ -48,11 +48,12 @@
 		"test:watch": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test --watch test/*.test.ts",
 		"typecheck": "tsc --project tsconfig.json"
 	},
-	"dependencies": {},
+	"dependencies": {
+		"ox": "0.9.6"
+	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.12",
 		"@safe-global/mock-contract": "4.1.0",
-		"ox": "0.9.6",
 		"@types/node": "24.3.1",
 		"typescript": "5.9.2"
 	}

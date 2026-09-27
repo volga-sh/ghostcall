@@ -30,8 +30,10 @@ const results = await aggregateCalls(client, [
 
 ```ts
 async function aggregateCalls(
-	provider: EIP1193ProviderWithRequestFn,
-	calls: readonly GhostcallAggregateCall[],
+	provider: {
+		request(args: { method: string; params?: unknown }): Promise<unknown>;
+	},
+	calls: readonly GhostcallCall[],
 	options?: GhostcallAggregateOptions,
 ): Promise<GhostcallResult[]>;
 ```
@@ -40,18 +42,14 @@ async function aggregateCalls(
 
 ### provider
 
-```ts
-type EIP1193ProviderWithRequestFn = {
-	request(args: { method: string; params?: unknown }): Promise<unknown>;
-};
-```
-
-The provider that sends the outer `eth_call`.
+A provider with a compatible `request` method, such as a viem client or ox transport.
 
 ### calls
 
 ```ts
-type GhostcallAggregateCall = {
+import type { Hex } from "@volga-sh/evm-ghostcall";
+
+type GhostcallCall = {
 	to: Hex;
 	data: Hex;
 	allowFailure?: boolean;
@@ -71,7 +69,7 @@ type GhostcallAggregateOptions = {
 	maxInitcodeBytes?: number;
 	ethCall?: {
 		from?: Hex;
-		gas?: HexQuantity;
+		gas?: Hex;
 		blockTag?: string | number | bigint;
 	};
 };

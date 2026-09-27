@@ -1,385 +1,176 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Abi, AbiError, AbiFunction, type Hex } from "ox";
+import { Abi, AbiError, AbiFunction } from "ox";
+import { size as hexSize } from "ox/Hex";
 import {
 	aggregateCalls,
 	aggregateDecodedCalls,
 	encodeCalls,
+	type Hex,
 } from "../src/sdk/index.ts";
+import { deployContract, startAnvil, stopAnvil } from "./support/anvil.ts";
+import { setupMock } from "./support/ghostcall.ts";
 
-import {
-	deployContract,
-	ethCallCreateRaw,
-	startAnvil,
-	stopAnvil,
-} from "./support/anvil.ts";
-import {
-	decodeFunctionResult,
-	encodeFunctionData,
-	encodeFunctionResult,
-	getRevertData,
-	getRpcError,
-	loadArtifact,
-	readAbi,
-	readBytecode,
-	sendFunctionTransaction,
-} from "./support/ghostcall.ts";
-
-const mockArtifactPath = "out/MockContract.sol/MockContract.json";
-const oversizedReturnRuntimeInitcode =
-	"0x6006600c60003960066000f36180006000f3" as Hex.Hex;
-
-const emptyAbi = Abi.from([]);
-const maxCreateReturnSize = 0x6000;
-const encodedResultHeaderSize = 0x02;
-const maxSingleReturnDataSize = maxCreateReturnSize - encodedResultHeaderSize;
-
-test("Ghostcall integration", async (t) => {
-	const anvil = await startAnvil();
-	t.after(async () => {
-		await stopAnvil(anvil);
-	});
-
-	const mockArtifact = await loadArtifact(mockArtifactPath);
-	const mockInitcode = readBytecode(mockArtifact, mockArtifactPath);
-	const mockAbi = readAbi(mockArtifact, mockArtifactPath);
-	const mockAddress = await deployContract(anvil.transport, mockInitcode);
-
-	const getValue = AbiFunction.from("function getValue() returns (uint256)");
-	const getGreeting = AbiFunction.from(
-		"function getGreeting() returns (string)",
-	);
-	const fail = AbiFunction.from("function fail()");
-	const balanceOf = AbiFunction.from(
-		"function balanceOf(address) view returns (uint256)",
-	);
-	const invocationCount = AbiFunction.from(
-		"function invocationCount() returns (uint256)",
-	);
-
-	const givenCalldataReturn = AbiFunction.fromAbi(
-		mockAbi,
-		"givenCalldataReturn",
-	);
-	const givenMethodReturn = AbiFunction.fromAbi(mockAbi, "givenMethodReturn");
-	const givenCalldataRevertWithMessage = AbiFunction.fromAbi(
-		mockAbi,
-		"givenCalldataRevertWithMessage",
-	);
-	const reset = AbiFunction.fromAbi(mockAbi, "reset");
+test("ghostcall integration", async (t) => {
+	const { transport, to, write } = await setupMock(t);
+	t.beforeEach(() => write("reset"));
 
 	await t.test(
-		"aggregates configured returndata and revert data from the mock",
+		"preserves revert data and continues to later calls",
 		async () => {
-			await sendFunctionTransaction(anvil.transport, mockAddress, reset, []);
-
-			const getValueCall = encodeFunctionData(getValue, []);
-			const getGreetingCall = encodeFunctionData(getGreeting, []);
-			const failCall = encodeFunctionData(fail, []);
-
-			await sendFunctionTransaction(
-				anvil.transport,
-				mockAddress,
-				givenCalldataReturn,
-				[getValueCall, encodeFunctionResult(getValue, 0x11223344n)],
-			);
-			await sendFunctionTransaction(
-				anvil.transport,
-				mockAddress,
-				givenCalldataReturn,
-				[
-					getGreetingCall,
-					encodeFunctionResult(getGreeting, "hello from mock-contract"),
-				],
-			);
-			await sendFunctionTransaction(
-				anvil.transport,
-				mockAddress,
-				givenCalldataRevertWithMessage,
-				[failCall, "mocked revert"],
-			);
-
-			const decodedResults = await aggregateDecodedCalls(anvil.transport, [
-				{
-					to: mockAddress,
-					data: getValueCall,
-					decodeResult: (returnData) =>
-						decodeFunctionResult(getValue, returnData),
-				},
-				{
-					to: mockAddress,
-					data: getGreetingCall,
-					decodeResult: (returnData) =>
-						decodeFunctionResult(getGreeting, returnData),
-				},
-			]);
-			const failureEntries = await aggregateCalls(anvil.transport, [
-				{ to: mockAddress, data: failCall, allowFailure: true },
-			]);
-			const [valueResult, greetingResult] = decodedResults;
-			const [failureEntry] = failureEntries;
-
-			assert.equal(valueResult, 0x11223344n);
-			assert.equal(greetingResult, "hello from mock-contract");
-
-			assert.ok(failureEntry);
-			assert.equal(failureEntry.success, false);
-			const revertError = AbiError.fromAbi(emptyAbi, failureEntry.returnData);
-			assert.equal(revertError.name, "Error");
-			assert.equal(
-				AbiError.decode(revertError, failureEntry.returnData),
+			await write("givenCalldataRevertWithMessage", [
+				"0x11111111",
 				"mocked revert",
+			]);
+			await write("givenCalldataReturn", ["0x22222222", "0xabcd"]);
+			const calls = [
+				{ to, data: "0x11111111" },
+				{ to, data: "0x22222222" },
+			] as const;
+			await assert.rejects(
+				aggregateCalls(transport, calls),
+				/Ghostcall subcall 0 failed/,
 			);
+			const [failure, success] = await aggregateCalls(transport, [
+				{ ...calls[0], allowFailure: true },
+				calls[1],
+			]);
+			assert.ok(failure);
+			assert.equal(failure.success, false);
+			const error = AbiError.fromAbi([], failure.returnData);
+			assert.equal(AbiError.decode(error, failure.returnData), "mocked revert");
+			assert.deepEqual(success, { success: true, returnData: "0xabcd" });
 		},
 	);
 
-	await t.test("returns failure entries and continues the batch", async () => {
-		await sendFunctionTransaction(anvil.transport, mockAddress, reset, []);
-
-		const failCall = encodeFunctionData(fail, []);
-		const getValueCall = encodeFunctionData(getValue, []);
-
-		await sendFunctionTransaction(
-			anvil.transport,
-			mockAddress,
-			givenCalldataRevertWithMessage,
-			[failCall, "fatal mock revert"],
-		);
-		await sendFunctionTransaction(
-			anvil.transport,
-			mockAddress,
-			givenCalldataReturn,
-			[getValueCall, encodeFunctionResult(getValue, 0x55n)],
-		);
-
-		await assert.rejects(
-			aggregateCalls(anvil.transport, [
-				{ to: mockAddress, data: failCall },
-				{ to: mockAddress, data: getValueCall },
-			]),
-			/Ghostcall subcall 0 failed/,
-		);
-
-		const entries = await aggregateCalls(anvil.transport, [
-			{ to: mockAddress, data: failCall, allowFailure: true },
-			{ to: mockAddress, data: getValueCall },
-		]);
-		const [failureEntry, successEntry] = entries;
-
-		assert.ok(failureEntry);
-		assert.equal(failureEntry.success, false);
-
-		const revertError = AbiError.fromAbi(emptyAbi, failureEntry.returnData);
-		assert.equal(revertError.name, "Error");
-		assert.equal(
-			AbiError.decode(revertError, failureEntry.returnData),
-			"fatal mock revert",
-		);
-
-		assert.ok(successEntry);
-		assert.equal(successEntry.success, true);
-		assert.equal(
-			decodeFunctionResult(getValue, successEntry.returnData),
-			0x55n,
-		);
-	});
-
-	await t.test("returns an empty result list for an empty batch", async () => {
-		const entries = await aggregateCalls(anvil.transport, []);
-		assert.deepEqual(entries, []);
+	await t.test("executes empty batches", async () => {
+		assert.deepEqual(await aggregateCalls(transport, []), []);
 	});
 
 	await t.test(
-		"packs unaligned result entries after staging calldata",
+		"resolves ABI overloads and mixes ABI and raw decoders in order",
 		async () => {
-			await sendFunctionTransaction(anvil.transport, mockAddress, reset, []);
-
-			const firstCall = `0x${"aa".repeat(40)}` as Hex.Hex;
-			const secondCall = `0x${"bb".repeat(7)}` as Hex.Hex;
-			const firstReturn = "0xaa" as Hex.Hex;
-			const secondReturn = "0xbbccdd" as Hex.Hex;
-
-			await sendFunctionTransaction(
-				anvil.transport,
-				mockAddress,
-				givenCalldataReturn,
-				[firstCall, firstReturn],
-			);
-			await sendFunctionTransaction(
-				anvil.transport,
-				mockAddress,
-				givenCalldataReturn,
-				[secondCall, secondReturn],
-			);
-
-			const [firstEntry, secondEntry] = await aggregateCalls(anvil.transport, [
-				{ to: mockAddress, data: firstCall },
-				{ to: mockAddress, data: secondCall },
+			const abi = Abi.from([
+				"function lookup(uint256 id) view returns (bool)",
+				"function lookup(address owner) view returns (string)",
+				"function totalSupply() view returns (uint256)",
 			]);
+			const byId = AbiFunction.fromAbi(abi, "lookup", { args: [7n] });
+			const byOwner = AbiFunction.fromAbi(abi, "lookup", { args: [to] });
+			const supply = AbiFunction.fromAbi(abi, "totalSupply");
+			const idData = AbiFunction.encodeData(byId, [7n]);
+			for (const [data, result] of [
+				[idData, AbiFunction.encodeResult(byId, true)],
+				[
+					AbiFunction.encodeData(byOwner, [to]),
+					AbiFunction.encodeResult(byOwner, "owner"),
+				],
+				[
+					AbiFunction.encodeData(supply),
+					AbiFunction.encodeResult(supply, 123n),
+				],
+			] as const)
+				await write("givenCalldataReturn", [data, result]);
 
-			assert.ok(firstEntry);
-			assert.equal(firstEntry.success, true);
-			assert.equal(firstEntry.returnData, firstReturn);
-
-			assert.ok(secondEntry);
-			assert.equal(secondEntry.success, true);
-			assert.equal(secondEntry.returnData, secondReturn);
+			const results: [boolean, string, bigint, boolean] =
+				await aggregateDecodedCalls(transport, [
+					{ to, abi, functionName: "lookup", args: [7n] },
+					{ to, abi, functionName: "lookup", args: [to] },
+					{ to, abi, functionName: "totalSupply" },
+					{
+						to,
+						data: idData,
+						decodeResult: (data) => AbiFunction.decodeResult(byId, data),
+					},
+				]);
+			assert.deepEqual(results, [true, "owner", 123n, true]);
 		},
 	);
+
+	await t.test("packs unaligned results after staging calldata", async () => {
+		const cases = [
+			[`0x${"aa".repeat(40)}`, "0xaa"],
+			[`0x${"bb".repeat(7)}`, "0xbbccdd"],
+		] as const satisfies readonly [Hex, Hex][];
+		for (const [data, result] of cases)
+			await write("givenCalldataReturn", [data, result]);
+		assert.deepEqual(
+			await aggregateCalls(
+				transport,
+				cases.map(([data]) => ({ to, data })),
+			),
+			cases.map(([, returnData]) => ({ success: true, returnData })),
+		);
+	});
 
 	await t.test(
-		"uses CALL semantics so same-batch state changes are visible to later calls",
+		"CALL exposes same-batch state changes to later calls",
 		async () => {
-			await sendFunctionTransaction(anvil.transport, mockAddress, reset, []);
-
-			const owner = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-			const balanceCall = encodeFunctionData(balanceOf, [owner]);
-			const invocationCountCall = encodeFunctionData(invocationCount, []);
-
-			await sendFunctionTransaction(
-				anvil.transport,
-				mockAddress,
-				givenMethodReturn,
-				[balanceCall, encodeFunctionResult(balanceOf, 123n)],
+			const balance = AbiFunction.from(
+				"function balanceOf(address) view returns (uint256)",
 			);
-
-			const [, countEntry] = await aggregateCalls(anvil.transport, [
-				{ to: mockAddress, data: balanceCall },
-				{ to: mockAddress, data: invocationCountCall },
+			const count = AbiFunction.from(
+				"function invocationCount() returns (uint256)",
+			);
+			await write("givenMethodReturn", [
+				AbiFunction.encodeData(balance, [to]),
+				AbiFunction.encodeResult(balance, 123n),
 			]);
-
-			assert.ok(countEntry);
-			assert.equal(countEntry.success, true);
-			assert.equal(
-				decodeFunctionResult(invocationCount, countEntry.returnData),
-				1n,
+			assert.deepEqual(
+				await aggregateDecodedCalls(transport, [
+					{ to, abi: [balance], functionName: "balanceOf", args: [to] },
+					{ to, abi: [count], functionName: "invocationCount" },
+				]),
+				[123n, 1n],
 			);
 		},
 	);
+});
 
-	await t.test("returns data up to the CREATE return-size limit", async () => {
-		await sendFunctionTransaction(anvil.transport, mockAddress, reset, []);
-
-		const largeCall = "0x12345678";
-		const maxSizedResponse =
-			`0x${"11".repeat(maxSingleReturnDataSize)}` as Hex.Hex;
-
-		await sendFunctionTransaction(
-			anvil.transport,
-			mockAddress,
-			givenCalldataReturn,
-			[largeCall, maxSizedResponse],
+for (const [limit, codeSizeLimit, returnBytes] of [
+	["CREATE", undefined, 0x6000 - 2],
+	["uint15 header", 65536, 0x7fff],
+] as const) {
+	test(`returns one entry at the ${limit} limit`, async (t) => {
+		const { transport, to, write } = await setupMock(t, codeSizeLimit);
+		const returnData: Hex = `0x${"11".repeat(returnBytes)}`;
+		await write("givenCalldataReturn", ["0x12345678", returnData]);
+		assert.deepEqual(
+			await aggregateCalls(transport, [{ to, data: "0x12345678" }]),
+			[{ success: true, returnData }],
 		);
-
-		const [entry] = await aggregateCalls(anvil.transport, [
-			{ to: mockAddress, data: largeCall },
-		]);
-
-		assert.ok(entry);
-		assert.equal(entry.success, true);
-		assert.equal(entry.returnData, maxSizedResponse);
 	});
-});
-
-test("Ghostcall can return aggregate responses above the old in-contract cap", async (t) => {
-	const anvil = await startAnvil({ args: ["--code-size-limit", "32768"] });
-	t.after(async () => {
-		await stopAnvil(anvil);
-	});
-
-	const mockArtifact = await loadArtifact(mockArtifactPath);
-	const mockInitcode = readBytecode(mockArtifact, mockArtifactPath);
-	const mockAbi = readAbi(mockArtifact, mockArtifactPath);
-	const mockAddress = await deployContract(anvil.transport, mockInitcode);
-
-	const balanceOf = AbiFunction.from(
-		"function balanceOf(address) view returns (uint256)",
-	);
-	const givenMethodReturn = AbiFunction.fromAbi(mockAbi, "givenMethodReturn");
-	const owner = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-	const balanceCall = encodeFunctionData(balanceOf, [owner]);
-	const balanceResult = encodeFunctionResult(balanceOf, 123n);
-
-	await sendFunctionTransaction(
-		anvil.transport,
-		mockAddress,
-		givenMethodReturn,
-		[balanceCall, balanceResult],
-	);
-
-	const callCount = Math.floor(0x6000 / (2 + 32)) + 1;
-	const entries = await aggregateCalls(
-		anvil.transport,
-		Array.from({ length: callCount }, () => ({
-			to: mockAddress,
-			data: balanceCall,
-		})),
-	);
-
-	assert.ok(
-		callCount * (encodedResultHeaderSize + byteLength(balanceResult)) > 0x6000,
-	);
-	assert.equal(entries.length, callCount);
-
-	for (const entry of entries) {
-		assert.equal(entry.success, true);
-		assert.equal(entry.returnData, balanceResult);
-	}
-});
-
-test("Ghostcall returns one entry at the uint15 returndata header limit", async (t) => {
-	const anvil = await startAnvil({ args: ["--code-size-limit", "65536"] });
-	t.after(async () => {
-		await stopAnvil(anvil);
-	});
-
-	const mockArtifact = await loadArtifact(mockArtifactPath);
-	const mockInitcode = readBytecode(mockArtifact, mockArtifactPath);
-	const mockAbi = readAbi(mockArtifact, mockArtifactPath);
-	const mockAddress = await deployContract(anvil.transport, mockInitcode);
-
-	const givenCalldataReturn = AbiFunction.fromAbi(
-		mockAbi,
-		"givenCalldataReturn",
-	);
-	const largeCall = "0x12345678";
-	const maxSizedResponse = `0x${"11".repeat(0x7fff)}` as Hex.Hex;
-
-	await sendFunctionTransaction(
-		anvil.transport,
-		mockAddress,
-		givenCalldataReturn,
-		[largeCall, maxSizedResponse],
-	);
-
-	const [entry] = await aggregateCalls(anvil.transport, [
-		{ to: mockAddress, data: largeCall },
-	]);
-
-	assert.ok(entry);
-	assert.equal(entry.success, true);
-	assert.equal(entry.returnData, maxSizedResponse);
-});
-
-test("Ghostcall reverts when one entry exceeds the uint15 returndata header", async (t) => {
-	const anvil = await startAnvil({ args: ["--code-size-limit", "65536"] });
-	t.after(async () => {
-		await stopAnvil(anvil);
-	});
-
-	const oversizedReturnAddress = await deployContract(
-		anvil.transport,
-		oversizedReturnRuntimeInitcode,
-	);
-	const response = await ethCallCreateRaw(
-		anvil.transport,
-		encodeCalls([{ to: oversizedReturnAddress, data: "0x" }]),
-	);
-	const error = getRpcError(response);
-
-	assert.equal(getRevertData(error), "0x");
-});
-
-function byteLength(value: `0x${string}`): number {
-	return (value.length - 2) / 2;
 }
+
+test("aggregate responses can exceed the old in-contract cap", async (t) => {
+	const { transport, to, write } = await setupMock(t, 32768);
+	const returnData: Hex = `0x${"00".repeat(32)}`;
+	await write("givenCalldataReturn", ["0x12345678", returnData]);
+	const count = Math.floor(0x6000 / (2 + hexSize(returnData))) + 1;
+	const calls = Array.from({ length: count }, () => ({
+		to,
+		data: "0x12345678" as const,
+	}));
+	assert.deepEqual(
+		await aggregateCalls(transport, calls),
+		Array.from({ length: count }, () => ({ success: true, returnData })),
+	);
+});
+
+test("reverts with empty data when an entry exceeds the uint15 header", async (t) => {
+	const anvil = await startAnvil({ args: ["--code-size-limit", "65536"] });
+	t.after(() => stopAnvil(anvil));
+	// Deploy a runtime that returns 0x8000 bytes, one more than the packed header permits.
+	const to = await deployContract(
+		anvil.transport,
+		"0x6006600c60003960066000f36180006000f3",
+	);
+	const response = await anvil.transport.request(
+		{
+			method: "eth_call",
+			params: [{ data: encodeCalls([{ to, data: "0x" }]) }, "latest"],
+		},
+		{ raw: true },
+	);
+	assert.equal(response.error?.data, "0x");
+});

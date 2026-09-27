@@ -3,19 +3,11 @@ title: GhostcallSubcallError
 description: Inspect a contract call that caused a batch to throw.
 ---
 
-`GhostcallSubcallError` identifies which contract call failed.
-
-- `aggregateDecodedCalls()` throws it for any failed call.
-- `aggregateCalls()` throws it when a failed call does not set
-  `allowFailure: true`.
-
-## Usage
+`aggregateDecodedCalls()` throws `GhostcallSubcallError` for any failed call.
+`aggregateCalls()` throws it unless that entry sets `allowFailure: true`.
 
 ```ts
-import {
-	aggregateCalls,
-	GhostcallSubcallError,
-} from "@volga-sh/evm-ghostcall";
+import { aggregateCalls, GhostcallSubcallError } from "@volga-sh/evm-ghostcall";
 
 try {
 	await aggregateCalls(client, [
@@ -25,56 +17,18 @@ try {
 		},
 	]);
 } catch (error) {
-	if (error instanceof GhostcallSubcallError) {
-		console.log(error.index);
-		console.log(error.call);
-		console.log(error.result.returnData);
-	}
+	if (!(error instanceof GhostcallSubcallError)) throw error;
+	console.log(error.index, error.call, error.result.returnData);
 }
 ```
 
-## Signature
+The error extends `Error` with three readonly properties:
 
-```ts
-class GhostcallSubcallError extends Error {
-	readonly index: number;
-	readonly call: GhostcallAggregateCall;
-	readonly result: GhostcallFailedResult;
-}
-```
+| Property | Type | Meaning |
+| --- | --- | --- |
+| `index` | `number` | Zero-based position of the failed call. |
+| `call` | `GhostcallCall` | The executed raw entry. ABI calls expose the target and prepared calldata. |
+| `result` | `Extract<GhostcallResult, { success: false }>` | The failed result, including any raw revert data in `returnData`. |
 
-## Properties
-
-### index
-
-The zero-based position of the failed call.
-
-```ts
-number
-```
-
-### call
-
-The original call entry passed to the SDK.
-
-```ts
-GhostcallAggregateCall
-```
-
-### result
-
-The failed result and its raw return data. `returnData` contains revert data
-when the contract returned any.
-
-```ts
-type GhostcallFailedResult = {
-	success: false;
-	returnData: Hex;
-};
-```
-
-This error means the outer ghostcall request completed and one inner contract
-call failed. Provider errors and request-size errors use their own error types.
-
-Set `allowFailure: true` on an `aggregateCalls()` entry to return the failed
-result instead.
+The outer request completed, but an inner call failed. Provider, transport,
+encoding, and decoding errors pass through with their original types.
