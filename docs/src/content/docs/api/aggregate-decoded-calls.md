@@ -41,6 +41,8 @@ pass an ABI containing the specific overload you intend to call.
 
 One output becomes a scalar; multiple outputs form an ordered tuple. A function
 with no outputs returns `undefined`. These are ox's decoding conventions.
+Since 0.0.5, ghostcall returns checksummed ABI-decoded addresses, including
+addresses inside tuples and arrays. Earlier versions returned lowercase addresses.
 
 ## Raw calls with custom decoders
 

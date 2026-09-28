@@ -53,6 +53,9 @@ Function names, arguments, and results are inferred from the ABI. Functions
 with inputs require `args`, for example `args: [owner]` for `balanceOf`.
 Keep ABIs literal with `as const`, viem's `parseAbi`, or ox's `Abi.from`.
 
+Since 0.0.5, ABI-decoded addresses are checksummed, including addresses nested in
+tuples and arrays. Earlier versions returned lowercase addresses.
+
 For already-encoded calldata, use the raw API:
 
 ```ts
@@ -88,8 +91,14 @@ for the removed helper aliases. Runtime exports are unchanged.
 
 ## Development
 
+Use Node.js from `.nvmrc`, npm 12.1.0, and Foundry v1.8.3. CI also tests the
+latest Node.js 24 LTS release. Foundry installs the compiler pinned in
+`foundry.toml` (Solidity 0.8.37); the EVM target stays Prague for compatibility.
+
 ```sh
-npm install
+nvm install
+npm install --global npm@12.1.0
+npm ci
 npm run build:sdk
 npm run test
 npm run check
@@ -98,6 +107,7 @@ npm run check
 To work on the documentation:
 
 ```sh
+npm ci --prefix docs
 npm run docs:dev
 npm run docs:build
 ```
