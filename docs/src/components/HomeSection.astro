@@ -1,0 +1,66 @@
+---
+type Props = {
+	title: string;
+	id: string;
+};
+
+// biome-ignore lint/correctness/noUnusedVariables: Referenced by the Astro template.
+const { title, id } = Astro.props;
+// biome-ignore lint/correctness/noUnusedVariables: Referenced by the Astro template.
+const headingId = `${id}-title`;
+---
+
+<section class="home-section" id={id} aria-labelledby={headingId}>
+	<div class="not-content"><h2 id={headingId}>{title}</h2></div>
+	<div class="home-section-body"><slot /></div>
+</section>
+
+<style>
+	.home-section {
+		padding-block: 2.75rem;
+		border-top: 1px solid var(--gc-rule);
+		scroll-margin-top: calc(var(--sl-nav-height) + 1.5rem);
+	}
+
+	h2 {
+		margin: 0 0 1rem;
+		color: var(--gc-ink);
+		font-size: 1.75rem;
+		font-weight: 600;
+		letter-spacing: -0.035em;
+		line-height: 1.2;
+	}
+
+	.home-section-body {
+		min-width: 0;
+	}
+
+	.home-section-body > :global(p) {
+		max-width: 68ch;
+		color: var(--gc-muted);
+	}
+
+	.home-section-body > :global(* + *) {
+		margin-top: 1.25rem;
+	}
+
+	.home-section-body > :global(.home-follow-links) {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem 1.5rem;
+	}
+
+	.home-section-body > :global(.home-follow-links a) {
+		padding-block: 0.375rem;
+		color: var(--gc-accent);
+		font-size: 0.875rem;
+		font-weight: 600;
+		text-decoration: none;
+	}
+
+	.home-section-body > :global(.home-follow-links a:is(:hover, :focus-visible)) {
+		color: var(--gc-accent-deep);
+		text-decoration: underline;
+		text-underline-offset: 0.2em;
+	}
+</style>

@@ -26,3 +26,9 @@
 [data-has-hero] .content-panel > .sl-container > * + * {
 	margin-top: 0;
 }
+
+@media (max-width: 49.99rem) {
+	[data-has-hero] .content-panel {
+		padding-inline: 1.25rem;
+	}
+}

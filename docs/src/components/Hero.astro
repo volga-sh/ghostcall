@@ -1,82 +1,124 @@
 ---
+// biome-ignore lint/correctness/noUnusedImports: Rendered by the Astro template.
+import { Code } from "@astrojs/starlight/components";
+
 // biome-ignore lint/correctness/noUnusedVariables: Referenced by the Astro template.
 const hero = Astro.locals.starlightRoute.entry.data.hero;
 ---
 
 {
 	hero && (
-		<section class="manual-abstract" aria-labelledby="_top">
-			<div class="manual-abstract-label" aria-hidden="true">
-				<span>§00</span>
-				<span>Abstract</span>
+		<section class="home-hero not-content" aria-labelledby="_top">
+			<p class="eyebrow">A small primitive for EVM reads</p>
+			<h1 id="_top">{hero.title}</h1>
+			{hero.tagline && <p class="hero-description">{hero.tagline}</p>}
+			<div class="hero-actions">
+				<a class="primary-action" href="/getting-started/">Get started <span aria-hidden="true">→</span></a>
+				<a class="secondary-action" href="/api/">API reference <span aria-hidden="true">→</span></a>
 			</div>
-			<div class="manual-abstract-body">
-				<h1 id="_top">{hero.title}</h1>
-				{hero.tagline && <p>{hero.tagline}</p>}
+			<div class="hero-install" id="install">
+				<span class="install-label">Install</span>
+				<Code code="npm install @volga-sh/evm-ghostcall" lang="sh" />
 			</div>
 		</section>
 	)
 }
 
 <style>
-	.manual-abstract {
-		display: grid;
-		grid-template-columns: var(--gc-label-column) minmax(0, 1fr);
-		gap: var(--gc-column-gap);
-		padding-block: 2.5rem 1.5rem;
+	.home-hero {
+		padding-block: clamp(3rem, 7vw, 5.5rem) 3.5rem;
 	}
 
-	.manual-abstract-label {
-		display: flex;
-		flex-direction: column;
-		gap: 0.3rem;
-		/* Sits the label's cap-line on the first cap-line of the title. */
-		padding-top: 0.15rem;
-		color: var(--gc-muted);
-		font-family: var(--gc-font-mono);
-		font-size: 0.68rem;
+	.eyebrow {
+		margin: 0 0 1.25rem;
+		color: var(--gc-accent);
+		font-size: 0.8125rem;
 		font-weight: 600;
-		letter-spacing: 0.09em;
-		text-transform: uppercase;
-	}
-
-	.manual-abstract-body {
-		min-width: 0;
 	}
 
 	h1 {
+		max-width: 18ch;
 		margin: 0;
 		color: var(--gc-ink);
-		font-family: var(--gc-font-serif);
-		font-size: 3.5rem;
-		font-weight: 600;
-		letter-spacing: -0.03em;
-		line-height: 1.02;
+		font-family: var(--gc-font-sans);
+		font-size: clamp(2.5rem, 5vw, 4rem);
+		font-weight: 650;
+		letter-spacing: -0.045em;
+		line-height: 1.08;
 		text-wrap: balance;
 	}
 
-	p {
-		margin: 1.15rem 0 0;
-		color: var(--gc-ink);
-		font-family: var(--gc-font-serif);
-		font-size: 1.15rem;
-		line-height: 1.55;
+	.hero-description {
+		max-width: 38rem;
+		margin: 1.5rem 0 0;
+		color: var(--gc-muted);
+		font-size: 1.125rem;
+		line-height: 1.7;
+		text-wrap: pretty;
 	}
 
-	@media screen and (max-width: 47.99rem) {
-		.manual-abstract {
-			grid-template-columns: minmax(0, 1fr);
-			gap: 1rem;
-		}
+	.hero-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.75rem 1.75rem;
+		margin-top: 1.75rem;
+	}
 
-		.manual-abstract-label {
-			flex-direction: row;
-			gap: 0.75rem;
-			padding-top: 0;
+	.hero-actions a {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 1.25rem;
+		min-height: 2.875rem;
+		font-size: 0.9375rem;
+		font-weight: 600;
+		text-decoration: none;
+	}
+
+	.primary-action {
+		border-radius: var(--gc-radius);
+		padding: 0.65rem 1.125rem;
+		background: var(--gc-accent);
+		color: var(--gc-surface);
+	}
+
+	.primary-action:hover {
+		background: var(--gc-accent-deep);
+	}
+
+	.secondary-action {
+		color: var(--gc-accent);
+	}
+
+	.secondary-action:hover {
+		color: var(--gc-accent-deep);
+	}
+
+	.hero-install {
+		max-width: 32rem;
+		margin-top: 2rem;
+		scroll-margin-top: calc(var(--sl-nav-height) + 1.5rem);
+	}
+
+	.install-label {
+		display: block;
+		margin-bottom: 0.5rem;
+		color: var(--gc-muted);
+		font-size: 0.8125rem;
+	}
+
+	@media (max-width: 35rem) {
+		.home-hero {
+			padding-block: 2.5rem 3rem;
 		}
 
 		h1 {
-			font-size: 2.4rem;
+			font-size: 2.5rem;
+		}
+
+		.hero-description {
+			font-size: 1rem;
 		}
 	}
 </style>

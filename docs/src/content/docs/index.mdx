@@ -2,9 +2,10 @@
 title: Batch reads through one eth_call
 description: Batch contract reads through one CREATE-style eth_call.
 template: splash
+tableOfContents: false
 hero:
   title: Batch reads through one eth_call
-  tagline: ghostcall combines contract reads into one eth_call. No contract deployment or onchain dependencies are required.
+  tagline: Combine contract reads into a single RPC request. No contract deployment or onchain dependencies required.
 head:
   - tag: title
     content: ghostcall — Batch reads through one eth_call
@@ -20,26 +21,14 @@ head:
 
 import ApiIndex from "../../components/ApiIndex.astro";
 import BatchFlow from "../../components/BatchFlow.astro";
-import ManualSection from "../../components/ManualSection.astro";
-import PayloadFigure from "../../components/PayloadFigure.astro";
+import HomeSection from "../../components/HomeSection.astro";
 
-<BatchFlow />
+<HomeSection title="Two reads. One request." id="read-two-values">
 
-<ManualSection index="01" title="Install" id="install">
+Describe the calls once and receive typed results in the same order. This example
+reads the WETH total supply and an account balance on Ethereum.
 
-```sh title="Terminal"
-npm install @volga-sh/evm-ghostcall
-```
-
-</ManualSection>
-
-<ManualSection index="02" title="Read two values" id="read-two-values">
-
-This example reads the WETH total supply and one account balance on Ethereum.
-ghostcall sends both reads in one RPC request and returns decoded `bigint`
-values in the same order.
-
-```ts title="Listing 2.1 · TypeScript"
+```ts title="TypeScript"
 import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
 import { erc20Abi } from "viem";
 
@@ -47,52 +36,55 @@ const token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const account = "0x28C6c06298d514Db089934071355E5743bf21d60";
 
 const [supply, balance] = await aggregateDecodedCalls(provider, [
-	{
-		to: token,
-		abi: erc20Abi,
-		functionName: "totalSupply",
-	},
-	{
-		to: token,
-		abi: erc20Abi,
-		functionName: "balanceOf",
-		args: [account],
-	},
+  { to: token, abi: erc20Abi, functionName: "totalSupply" },
+  { to: token, abi: erc20Abi, functionName: "balanceOf", args: [account] },
 ]);
+// supply: bigint, balance: bigint
 ```
 
-</ManualSection>
-
-<ManualSection index="03" title="How it works" id="how-it-works">
-
-Batching reads normally means deploying a Multicall contract and routing every
-read through it. ghostcall removes that dependency by using a step the EVM
-already performs: contract creation.
-
-An `eth_call` without a `to` address makes the EVM treat its `data` as initcode,
-the code that runs once when a contract is created. Initcode normally ends by
-returning the runtime bytecode to store onchain. ghostcall returns batch results
-instead. Its 91-byte program reads the call entries appended after its own bytes,
-runs each one in order, and returns a packed result entry per call.
-
-Because `eth_call` only simulates execution, no contract is deployed and no state
-change is saved.
-
-<PayloadFigure />
-
-<p class="manual-follow-link not-content">
-	<a href="/protocol/">Protocol <span aria-hidden="true">→</span></a>
-	<a href="/limits/">Limits <span aria-hidden="true">→</span></a>
+<p class="home-follow-links not-content">
+  <a href="/getting-started/">Set up a provider and run your first batch <span aria-hidden="true">→</span></a>
 </p>
 
-</ManualSection>
+</HomeSection>
 
-<ManualSection index="04" title="API index" id="api-index">
+<HomeSection title="A small program, no deployment." id="how-it-works">
+
+An `eth_call` without a `to` address runs contract creation code. ghostcall uses
+that step to execute a 91-byte program: it calls each target in order and returns
+the results. Everything happens in a simulation. No contract is deployed and no
+state change is saved.
+
+<BatchFlow />
+
+<p class="home-follow-links not-content">
+  <a href="/protocol/">Explore the protocol <span aria-hidden="true">→</span></a>
+</p>
+
+</HomeSection>
+
+<HomeSection title="Choose the result you need." id="api-index">
+
+Four functions cover decoded values, raw results, and the request and response
+bytes. Use the level of control your application needs.
 
 <ApiIndex />
 
-<p class="manual-follow-link not-content">
-	<a href="/api/">Complete API reference <span aria-hidden="true">→</span></a>
+<p class="home-follow-links not-content">
+  <a href="/api/">Complete API reference <span aria-hidden="true">→</span></a>
 </p>
 
-</ManualSection>
+</HomeSection>
+
+<HomeSection title="Before you send a batch." id="limits">
+
+Your RPC endpoint must support CREATE-style `eth_call`. Request and response
+size limits depend on the chain and provider, so test the endpoint your
+application uses. `aggregateDecodedCalls()` throws if any call fails.
+
+<p class="home-follow-links not-content">
+  <a href="/limits/">Understand the limits <span aria-hidden="true">→</span></a>
+  <a href="/examples/">Browse recipes <span aria-hidden="true">→</span></a>
+</p>
+
+</HomeSection>

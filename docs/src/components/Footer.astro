@@ -1,3 +1,60 @@
 ---
-// The documentation intentionally has no footer.
+// biome-ignore lint/correctness/noUnusedImports: Rendered by the Astro template.
+import Pagination from "virtual:starlight/components/Pagination";
 ---
+
+<footer class="site-footer not-content">
+	{Astro.locals.starlightRoute.hasSidebar && <Pagination />}
+	<div class="footer-meta">
+		<a class="footer-brand" href="/">ghostcall</a>
+		<nav aria-label="Footer">
+			<a href="https://github.com/volga-sh/ghostcall">GitHub</a>
+			<a href="https://www.npmjs.com/package/@volga-sh/evm-ghostcall">npm</a>
+			<a href="https://github.com/volga-sh/ghostcall/blob/main/LICENSE">MIT license</a>
+		</nav>
+	</div>
+</footer>
+
+<style>
+	.site-footer {
+		margin-top: 3rem;
+	}
+
+	.footer-meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-top: 2rem;
+		border-top: 1px solid var(--gc-rule);
+		padding-block: 1.5rem;
+	}
+
+	a {
+		color: var(--gc-muted);
+		font-size: 0.8125rem;
+		text-decoration: none;
+	}
+
+	a:hover {
+		color: var(--gc-accent);
+	}
+
+	.footer-brand {
+		color: var(--gc-ink);
+		font-family: var(--gc-font-serif);
+		font-size: 1.25rem;
+		font-weight: 600;
+		letter-spacing: -0.035em;
+	}
+
+	nav {
+		display: flex;
+		gap: 1.5rem;
+	}
+
+	nav a {
+		padding-block: 0.75rem;
+	}
+</style>
