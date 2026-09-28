@@ -190,6 +190,7 @@ async function aggregateCalls(
 /**
  * Execute ABI-described calls or raw calls with custom decoders. Each tuple position
  * retains its result type. Any failed call throws; encoding/decoding errors pass through.
+ * ABI-decoded addresses are checksummed, including addresses nested in tuples or arrays.
  */
 async function aggregateDecodedCalls<
 	const TCalls extends readonly GhostcallDecodedInput[],

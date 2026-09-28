@@ -6,10 +6,16 @@ description: Build, test, and update the ghostcall repository.
 This page is for contributors working in the ghostcall repository. Run all
 commands from the repository root.
 
+Use the Node.js version in `.nvmrc`, npm 12.1.0, and Foundry v1.8.3. CI tests
+Node.js 26 and the latest Node.js 24 LTS release. `foundry.toml` pins Solidity
+0.8.37 and keeps the Prague EVM target for compatibility.
+
 ## Install and check the project
 
 ```sh
-npm install
+nvm install
+npm install --global npm@12.1.0
+npm ci
 npm run build:sdk
 npm run test
 npm run typecheck
@@ -35,6 +41,7 @@ and exercise the compiled program on a real local EVM.
 ## Work on the docs
 
 ```sh
+npm ci --prefix docs
 npm run docs:dev
 npm run docs:build
 npm run docs:preview
@@ -42,6 +49,11 @@ npm run docs:preview
 
 Documentation source files live in `docs/src`. The static build is written to
 `docs/dist`.
+
+npm 12 blocks dependency install scripts by default. `docs/package.json` allows
+the pinned esbuild binary setup script; fsevents uses its bundled macOS binary
+without rebuilding it. Review and update the esbuild approval when its version
+changes.
 
 ## Repository map
 

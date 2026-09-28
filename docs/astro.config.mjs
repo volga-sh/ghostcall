@@ -8,6 +8,8 @@ const socialImageAlt =
 
 export default defineConfig({
 	site,
+	// Preserve spacing between inline elements after Astro 7 changed the default.
+	compressHTML: true,
 	integrations: [
 		starlight({
 			title: "ghostcall",

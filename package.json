@@ -1,9 +1,10 @@
 {
 	"name": "@volga-sh/evm-ghostcall",
-	"version": "0.0.4",
+	"version": "0.0.5",
 	"description": "Batch EVM contract reads without deploying a Multicall contract.",
 	"license": "MIT",
 	"type": "module",
+	"packageManager": "npm@12.1.0",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/volga-sh/ghostcall.git"
@@ -29,14 +30,14 @@
 		"access": "public"
 	},
 	"scripts": {
-		"benchmark:limits": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/benchmark-limits.ts",
+		"benchmark:limits": "node scripts/benchmark-limits.ts",
 		"build:contracts": "forge build && npm run generate:sdk:initcode",
 		"build:sdk": "npm run build:contracts && tsc --project tsconfig.build.json",
 		"check": "biome check .",
 		"check:fix": "biome check --write .",
-		"docs:build": "npm run build --prefix docs",
-		"docs:dev": "npm run dev --prefix docs",
-		"docs:preview": "npm run preview --prefix docs",
+		"docs:build": "npm run build --prefix docs --",
+		"docs:dev": "npm run dev --prefix docs --",
+		"docs:preview": "npm run preview --prefix docs --",
 		"check:sdk:initcode": "git diff --exit-code -- src/sdk/generated/initcode.ts",
 		"format": "biome format --write .",
 		"format:check": "biome format .",
@@ -44,17 +45,17 @@
 		"lint": "biome lint .",
 		"lint:fix": "npm run check:fix",
 		"prepack": "npm run build:sdk",
-		"test": "npm run build:contracts && node --disable-warning=ExperimentalWarning --experimental-strip-types --test test/*.test.ts",
-		"test:watch": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test --watch test/*.test.ts",
+		"test": "npm run build:contracts && node --test test/*.test.ts",
+		"test:watch": "node --test --watch test/*.test.ts",
 		"typecheck": "tsc --project tsconfig.json"
 	},
 	"dependencies": {
-		"ox": "0.9.6"
+		"ox": "1.8.3"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.4.12",
+		"@biomejs/biome": "2.5.14",
 		"@safe-global/mock-contract": "4.1.0",
-		"@types/node": "24.3.1",
-		"typescript": "5.9.2"
+		"@types/node": "26.6.3",
+		"typescript": "7.0.2"
 	}
 }

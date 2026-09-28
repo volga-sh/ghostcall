@@ -12,21 +12,26 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7.0.0
         with:
-          node-version: 24.15.0
+          node-version-file: .nvmrc
           cache: npm
+
+      - name: Setup npm
+        run: npm install --global "$(node -p 'require("./package.json").packageManager')"
 
       - name: Install Node dependencies
         run: npm ci
 
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+        uses: foundry-rs/foundry-toolchain@v1.9.1
+        with:
+          version: v1.8.3
 
       - name: Build SDK
         run: npm run build:sdk
@@ -36,30 +41,65 @@ jobs:
 
   test:
     needs: build
+    strategy:
+      matrix:
+        node: [24.21.0, 26.10.0]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7.0.0
         with:
-          node-version: 24.15.0
+          node-version: ${{ matrix.node }}
           cache: npm
+
+      - name: Setup npm
+        run: npm install --global "$(node -p 'require("./package.json").packageManager')"
 
       - name: Install Node dependencies
         run: npm ci
 
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+        uses: foundry-rs/foundry-toolchain@v1.9.1
+        with:
+          version: v1.8.3
 
       - name: Run typecheck
         run: npm run typecheck
 
       - name: Run tests
         run: npm test
+
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Setup npm
+        run: npm install --global "$(node -p 'require("./package.json").packageManager')"
+
+      - name: Install docs dependencies
+        run: npm ci --prefix docs
+
+      - name: Build docs
+        run: npm run docs:build

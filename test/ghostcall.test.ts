@@ -87,6 +87,36 @@ test("ghostcall integration", async (t) => {
 		},
 	);
 
+	await t.test(
+		"checksums decoded addresses, including nested arrays",
+		async () => {
+			const abi = Abi.from([
+				"function owner() view returns (address)",
+				"function positions() view returns ((address owner, address[] delegates)[])",
+			]);
+			const owner = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+			const ownerFunction = AbiFunction.fromAbi(abi, "owner");
+			const positionsFunction = AbiFunction.fromAbi(abi, "positions");
+			await write("givenCalldataReturn", [
+				AbiFunction.encodeData(ownerFunction),
+				AbiFunction.encodeResult(ownerFunction, owner),
+			]);
+			await write("givenCalldataReturn", [
+				AbiFunction.encodeData(positionsFunction),
+				AbiFunction.encodeResult(positionsFunction, [
+					{ owner, delegates: [owner] },
+				]),
+			]);
+			assert.deepEqual(
+				await aggregateDecodedCalls(transport, [
+					{ to, abi, functionName: "owner" },
+					{ to, abi, functionName: "positions" },
+				]),
+				[owner, [{ owner, delegates: [owner] }]],
+			);
+		},
+	);
+
 	await t.test("packs unaligned results after staging calldata", async () => {
 		const cases = [
 			[`0x${"aa".repeat(40)}`, "0xaa"],
