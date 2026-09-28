@@ -74,41 +74,42 @@
 :root[data-theme],
 ::backdrop {
 	color-scheme: light;
-	--gc-paper: #f3efe6;
-	--gc-surface: #fffdf8;
-	--gc-ink: #172033;
-	--gc-muted: #596170;
-	--gc-rule: #c8c0b2;
-	--gc-rule-strong: #918a7e;
-	--gc-accent: #b4472a;
-	--gc-accent-soft: #ead8cf;
-	/* Readable on --gc-accent-soft, where --gc-accent only reaches 3.9:1. */
-	--gc-accent-deep: #7d2e1c;
-	--gc-code: #eef2f5;
-	--gc-code-chrome: #e2e8ed;
-	--gc-code-ink: #172033;
+	--gc-paper: #f7f8fa;
+	--gc-surface: #ffffff;
+	--gc-ink: #202632;
+	--gc-muted: #626b7a;
+	--gc-rule: #dde2e8;
+	--gc-rule-strong: #a8b2c1;
+	--gc-accent: #3d5f9a;
+	--gc-accent-soft: #eaf0fa;
+	--gc-accent-deep: #2d497c;
+	--gc-code: #f0f3f7;
+	--gc-code-chrome: #e9edf3;
+	--gc-code-ink: var(--gc-ink);
+	--gc-radius: 0.5rem;
+	--gc-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 	--gc-font-serif: "Source Serif 4", "Georgia", "Times New Roman", serif;
 	--gc-font-mono: "IBM Plex Mono", "SFMono-Regular", "Consolas", monospace;
 
 	--sl-color-white: var(--gc-ink);
-	--sl-color-gray-1: #253047;
-	--sl-color-gray-2: #3e485d;
+	--sl-color-gray-1: #303949;
+	--sl-color-gray-2: #485465;
 	--sl-color-gray-3: var(--gc-muted);
-	--sl-color-gray-4: #7c8390;
-	--sl-color-gray-5: #aeb3bb;
+	--sl-color-gray-4: #7b8798;
+	--sl-color-gray-5: var(--gc-rule-strong);
 	--sl-color-gray-6: var(--gc-code-chrome);
 	--sl-color-gray-7: var(--gc-paper);
 	--sl-color-black: var(--gc-paper);
 	--sl-color-accent-low: var(--gc-accent-soft);
 	--sl-color-accent: var(--gc-accent);
 	--sl-color-accent-high: var(--gc-accent-deep);
-	--sl-color-text: var(--gc-muted);
+	--sl-color-text: var(--gc-ink);
 	--sl-color-text-accent: var(--gc-accent);
-	--sl-color-text-invert: var(--gc-paper);
+	--sl-color-text-invert: var(--gc-surface);
 	--sl-color-bg: var(--gc-paper);
 	--sl-color-bg-nav: var(--gc-paper);
 	--sl-color-bg-sidebar: var(--gc-paper);
-	--sl-color-bg-inline-code: #e8e4dc;
+	--sl-color-bg-inline-code: var(--gc-code-chrome);
 	--sl-color-bg-accent: var(--gc-accent);
 	--sl-color-hairline-light: var(--gc-rule);
 	--sl-color-hairline: var(--gc-rule);
@@ -116,24 +117,21 @@
 	--sl-shadow-sm: none;
 	--sl-shadow-md: none;
 	--sl-shadow-lg: none;
-	--sl-font: var(--gc-font-serif);
+	--sl-font: var(--gc-font-sans);
 	--sl-font-mono: var(--gc-font-mono);
 }
 
 :root {
-	/* A4 page width at 96dpi: 210mm = 793.7px. The label column, gap and the
-	   remaining 39.5rem measure leave margins in A4 proportion. */
-	--gc-sheet: 49.5rem;
-	--gc-label-column: 7.5rem;
-	--gc-column-gap: 2.5rem;
-	--sl-line-height: 1.62;
-	--sl-line-height-headings: 1.05;
-	--sl-content-width: 54rem;
-	--sl-sidebar-width: 20rem;
-	--sl-nav-height: 5rem;
-	--sl-nav-pad-x: clamp(1rem, 3.5vw, 2.5rem);
-	--sl-text-h1: clamp(2.65rem, 5vw, 4.6rem);
-	--sl-text-h2: clamp(1.65rem, 2.5vw, 2rem);
+	--gc-sheet: 62rem;
+	--sl-line-height: 1.7;
+	--sl-line-height-headings: 1.2;
+	--sl-content-width: 48rem;
+	--sl-sidebar-width: 17rem;
+	--sl-nav-height: 4.5rem;
+	--sl-nav-pad-x: 1.5rem;
+	--sl-menu-button-size: 2.75rem;
+	--sl-text-h1: clamp(2rem, 3vw, 2.5rem);
+	--sl-text-h2: 1.5rem;
 	--sl-text-h3: 1.25rem;
 	--sl-content-gap-y: 1.1rem;
 }
@@ -144,7 +142,7 @@ html {
 }
 
 body {
-	font-size: 1.03rem;
+	font-size: 1rem;
 }
 
 ::selection {

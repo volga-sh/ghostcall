@@ -1,103 +1,153 @@
 ---
 // biome-ignore lint/correctness/noUnusedImports: Rendered by the Astro template.
 import Search from "virtual:starlight/components/Search";
+// biome-ignore lint/correctness/noUnusedImports: Rendered by the Astro template.
+import { Icon } from "@astrojs/starlight/components";
 
 // biome-ignore lint/correctness/noUnusedVariables: Referenced by the Astro template.
-const repository = "https://github.com/volga-sh/ghostcall";
+const { hasSidebar } = Astro.locals.starlightRoute;
 ---
 
-<div class="manual-header">
-	<a class="manual-brand" href="/">ghostcall</a>
+<div class="site-header">
+	<a class="site-brand" href="/">ghostcall</a>
 
-	<nav class="manual-nav" aria-label="Primary">
-		<a href="/#install">Install</a>
-		<a class="manual-nav-optional" href="/getting-started/">Guide</a>
+	<nav class="site-nav" aria-label="Primary">
+		<a href="/getting-started/">Docs</a>
 		<a href="/api/">API</a>
-		<a class="manual-nav-optional" href="/protocol/">Protocol</a>
-		<a href={repository}>Source</a>
+		<a href="/protocol/">Protocol</a>
+		<a href="https://github.com/volga-sh/ghostcall">GitHub <span aria-hidden="true">↗</span></a>
 	</nav>
 
-	<div class="manual-search">
-		<Search />
-	</div>
+	<div class="site-search"><Search /></div>
+
+	{
+		!hasSidebar && (
+			<>
+				<button class="home-menu-toggle" popovertarget="ghostcall-menu" aria-label="Menu">
+					<Icon name="bars" size="1.25rem" />
+				</button>
+				<nav id="ghostcall-menu" popover="auto" aria-label="Mobile navigation">
+					<a href="/getting-started/">Getting started</a>
+					<a href="/examples/">Recipes</a>
+					<a href="/api/">API reference</a>
+					<a href="/protocol/">Protocol</a>
+					<a href="/limits/">Limits</a>
+					<a href="https://github.com/volga-sh/ghostcall">GitHub ↗</a>
+				</nav>
+			</>
+		)
+	}
 </div>
 
 <style>
-	.manual-header {
-		display: grid;
-		grid-template-columns: auto minmax(0, 1fr) auto;
+	.site-header {
+		display: flex;
 		align-items: center;
-		gap: clamp(1rem, 3vw, 3rem);
-		width: 100%;
+		gap: 2rem;
 		height: 100%;
 	}
 
-	/* The landing-page masthead follows the same centred measure as its content. */
-	:global([data-has-hero]) .manual-header {
+	:global([data-has-hero]) .site-header {
 		max-width: var(--gc-sheet);
 		margin-inline: auto;
 	}
 
-	.manual-brand {
+	.site-brand {
+		margin-inline-end: auto;
 		color: var(--gc-ink);
 		font-family: var(--gc-font-serif);
 		font-size: 1.75rem;
 		font-weight: 700;
-		letter-spacing: -0.035em;
+		letter-spacing: -0.04em;
 		line-height: 1;
 		text-decoration: none;
-		white-space: nowrap;
 	}
 
-	.manual-nav {
+	.site-nav {
 		display: flex;
-		justify-content: flex-end;
 		align-items: center;
-		gap: clamp(0.8rem, 1.8vw, 1.7rem);
-		min-width: 0;
-		font-family: var(--gc-font-mono);
-		font-size: 0.72rem;
-		font-weight: 600;
-		letter-spacing: 0.08em;
-		line-height: 1;
-		text-transform: uppercase;
+		gap: 1.75rem;
+		font-size: 0.875rem;
+		font-weight: 500;
 		white-space: nowrap;
 	}
 
-	.manual-nav a {
+	.site-nav a {
+		padding-block: 0.75rem;
 		color: var(--gc-muted);
 		text-decoration: none;
 	}
 
-	.manual-nav a:hover,
-	.manual-nav a:focus-visible {
+	.site-nav a:is(:hover, :focus-visible) {
 		color: var(--gc-accent);
 	}
 
-	.manual-search {
-		display: flex;
-		justify-content: flex-end;
-		min-width: 2.5rem;
+	.site-nav span {
+		margin-inline-start: 0.2rem;
 	}
 
-	@media (max-width: 68rem) {
-		.manual-nav-optional {
-			display: none;
-		}
+	.site-search {
+		display: flex;
+		align-items: center;
+	}
+
+	.home-menu-toggle,
+	#ghostcall-menu {
+		display: none;
 	}
 
 	@media (max-width: 49.99rem) {
-		.manual-header {
-			grid-template-columns: minmax(0, 1fr) auto;
-			gap: 0.75rem;
+		.site-header {
+			gap: 0.5rem;
 		}
 
-		.manual-nav {
+		.site-brand {
+			font-size: 1.5rem;
+		}
+
+		.site-nav {
 			display: none;
 		}
 
-		.manual-brand {
-			font-size: 1.55rem;
+		.home-menu-toggle {
+			display: grid;
+			place-items: center;
+			width: 2.75rem;
+			height: 2.75rem;
+			border: 0;
+			border-radius: var(--gc-radius);
+			background: transparent;
+			color: var(--gc-ink);
+			cursor: pointer;
+		}
+
+		.home-menu-toggle:hover {
+			background: var(--gc-code);
+		}
+
+		#ghostcall-menu:popover-open {
+			display: grid;
+			inset: calc(var(--sl-nav-height) + 0.5rem) 1rem auto auto;
+			width: min(20rem, calc(100vw - 2rem));
+			margin: 0;
+			border: 1px solid var(--gc-rule);
+			border-radius: var(--gc-radius);
+			padding: 0.5rem;
+			background: var(--gc-surface);
+			box-shadow: 0 8px 24px #20263212;
+		}
+
+		#ghostcall-menu a {
+			border-radius: 0.25rem;
+			padding: 0.75rem;
+			color: var(--gc-ink);
+			font-size: 0.9375rem;
+			text-decoration: none;
+		}
+
+		#ghostcall-menu a:is(:hover, :focus-visible) {
+			background: var(--gc-accent-soft);
+			color: var(--gc-accent-deep);
 		}
 	}
 </style>

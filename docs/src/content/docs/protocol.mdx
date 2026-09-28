@@ -3,6 +3,8 @@ title: Protocol
 description: How ghostcall runs a batch and packs its request and response bytes.
 ---
 
+import PayloadFigure from "../../components/PayloadFigure.astro";
+
 This page defines the bytes sent to ghostcall and the bytes it returns. Most SDK
 users do not need to build these bytes themselves.
 
@@ -39,6 +41,8 @@ the gas available to later calls.
 
 ## Request bytes
 
+<PayloadFigure kind="request" />
+
 The request contains the compiled ghostcall program followed by call entries:
 
 ```text
@@ -61,6 +65,8 @@ request size. Manually built bytes must follow the same layout. Results from
 malformed hand-built requests are not defined.
 
 ## Response bytes
+
+<PayloadFigure kind="response" />
 
 The response contains one entry per call:
 

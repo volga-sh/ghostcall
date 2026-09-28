@@ -14,15 +14,19 @@ export default defineConfig({
 		starlight({
 			title: "ghostcall",
 			description: "Batch contract reads through one CREATE-style eth_call.",
-			tableOfContents: false,
+			tableOfContents: { minHeadingLevel: 2, maxHeadingLevel: 3 },
 			expressiveCode: {
 				themes: ["github-light"],
 				useStarlightDarkModeSwitch: false,
 				styleOverrides: {
+					borderRadius: "0.5rem",
+					borderColor: "var(--gc-rule)",
+					codeFontSize: "0.8125rem",
 					frames: {
 						editorBackground: "var(--gc-code)",
 						terminalBackground: "var(--gc-code)",
 						editorActiveTabBackground: "var(--gc-code)",
+						editorActiveTabIndicatorTopColor: "var(--gc-accent)",
 						inlineButtonBackground: "var(--gc-surface)",
 						inlineButtonForeground: "var(--gc-code-ink)",
 						frameBoxShadowCssValue: "none",

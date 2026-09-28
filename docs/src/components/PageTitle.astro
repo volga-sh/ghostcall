@@ -14,37 +14,46 @@ const label =
 	id === "api" || id.startsWith("api/")
 		? "API reference"
 		: (labels[id] ?? "Reference");
+const isIdentifier = id.startsWith("api/") && id !== "api/types";
+// Wrap identifiers at camel-case boundaries without changing their text or copy value.
+// biome-ignore lint/correctness/noUnusedVariables: Referenced by the Astro template.
+const titleParts = isIdentifier
+	? route.entry.data.title.split(/(?=[A-Z])/)
+	: [route.entry.data.title];
 ---
 
-<div class="manual-page-title not-content">
+<div class="page-title not-content">
 	<p>{label}</p>
-	<h1 id="_top">{route.entry.data.title}</h1>
+	<h1 id="_top" class:list={{ "api-title": isIdentifier }}>{titleParts.map((part, index) => <>{index > 0 && <wbr />}{part}</>)}</h1>
 </div>
 
 <style>
-	.manual-page-title {
-		padding-top: clamp(2rem, 5vw, 4.5rem);
+	.page-title {
+		padding-top: 1rem;
 	}
 
 	p {
-		margin: 0 0 0.9rem;
+		margin: 0 0 0.75rem;
 		color: var(--gc-muted);
-		font-family: var(--gc-font-mono);
-		font-size: 0.72rem;
+		font-size: 0.8125rem;
 		font-weight: 600;
-		letter-spacing: 0.09em;
-		text-transform: uppercase;
 	}
 
 	h1 {
-		max-width: 18ch;
 		margin: 0;
 		color: var(--gc-ink);
-		font-family: var(--gc-font-serif);
+		font-family: var(--gc-font-sans);
 		font-size: var(--sl-text-h1);
 		font-weight: 600;
-		letter-spacing: -0.035em;
-		line-height: 1;
+		letter-spacing: -0.04em;
+		line-height: 1.2;
 		overflow-wrap: anywhere;
+	}
+
+	.api-title {
+		font-family: var(--gc-font-mono);
+		font-size: clamp(1.375rem, 2.5vw, 2rem);
+		font-weight: 500;
+		letter-spacing: -0.04em;
 	}
 </style>
