@@ -6,8 +6,8 @@ description: Build, test, and update the ghostcall repository.
 This page is for contributors working in the ghostcall repository. Run all
 commands from the repository root.
 
-Use the Node.js version in `.nvmrc`, npm 12.1.0, and Foundry v1.8.3. CI tests
-Node.js 26 and the latest Node.js 24 LTS release. `foundry.toml` pins Solidity
+Use the latest Node.js 24 LTS release pinned in `.nvmrc`, npm 12.1.0, and
+Foundry v1.8.3. CI also tests Node.js 26. `foundry.toml` pins Solidity
 0.8.37 and keeps the Prague EVM target for compatibility.
 
 ## Install and check the project

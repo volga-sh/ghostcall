@@ -1,6 +1,6 @@
 {
 	"name": "@volga-sh/evm-ghostcall",
-	"version": "0.0.5",
+	"version": "0.0.6",
 	"description": "Batch EVM contract reads without deploying a Multicall contract.",
 	"license": "MIT",
 	"type": "module",
@@ -50,12 +50,12 @@
 		"typecheck": "tsc --project tsconfig.json"
 	},
 	"dependencies": {
-		"ox": "1.8.3"
+		"ox": "^1.8.3"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.14",
 		"@safe-global/mock-contract": "4.1.0",
-		"@types/node": "26.6.3",
+		"@types/node": "24.19.1",
 		"typescript": "7.0.2"
 	}
 }
