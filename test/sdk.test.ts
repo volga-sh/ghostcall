@@ -23,15 +23,15 @@ const providerReturning = (
 
 test("encodes ordered uint16-length/address/calldata entries after the initcode", () => {
 	const base = encodeCalls([]);
-	const first = { ...call, data: "0xaabb" } satisfies GhostcallCall;
+	const first = { ...call, data: "0xaAbB" } satisfies GhostcallCall;
 	const second = {
 		to: "0x2222222222222222222222222222222222222222",
 		data: "0x",
 	} satisfies GhostcallCall;
-	assert.equal(encodeCalls([first]), `${base}0002${first.to.slice(2)}aabb`);
+	assert.equal(encodeCalls([first]), `${base}0002${first.to.slice(2)}aAbB`);
 	assert.equal(
 		encodeCalls([first, second]),
-		`${base}0002${first.to.slice(2)}aabb0000${second.to.slice(2)}`,
+		`${base}0002${first.to.slice(2)}aAbB0000${second.to.slice(2)}`,
 	);
 });
 
@@ -104,6 +104,27 @@ test("decodes ordered successes and failures, rejecting malformed or truncated r
 	] as const) {
 		assert.throws(() => decodeResults(data), TypeError);
 	}
+});
+
+test("decodes upper- and lowercase headers across uint15 length boundaries", () => {
+	const expected = [];
+	let response: Hex = "0x";
+	for (const length of [
+		0, 1, 9, 10, 15, 16, 255, 256, 0xabc, 0xdef, 4095, 4096, 32767,
+	]) {
+		const returnData: Hex = `0x${"aB".repeat(length)}`;
+		for (const success of [false, true]) {
+			const header = ((success ? 0x8000 : 0) | length)
+				.toString(16)
+				.padStart(4, "0");
+			expected.push({ success, returnData });
+			response = `${response}${success ? header.toUpperCase() : header}${returnData.slice(2)}`;
+		}
+	}
+	assert.deepEqual(decodeResults(response), expected);
+	assert.throws(() => decodeResults(`${response}8FFF`), /Truncated.*body/);
+	assert.throws(() => decodeResults(`${response}8`), TypeError);
+	assert.throws(() => decodeResults(`${response}zzzz`), TypeError);
 });
 
 test("forwards CREATE-style eth_call options and preserves raw failure entries", async (t) => {
