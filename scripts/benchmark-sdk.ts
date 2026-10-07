@@ -16,8 +16,11 @@ const sdk: typeof import("../src/sdk/index.ts") = await import(
 		: new URL("../src/sdk/index.ts", import.meta.url).href
 );
 const to = "0x1111111111111111111111111111111111111111";
-const abi = parseAbi([
-	"function balanceOf(address owner) view returns (uint256)",
+const balanceOf = "function balanceOf(address owner) view returns (uint256)";
+const abi = parseAbi([balanceOf]);
+const overloadedAbi = parseAbi([
+	balanceOf,
+	"function balanceOf(address owner, uint256 id) view returns (uint256)",
 ]);
 let checksum = 0;
 
@@ -58,7 +61,7 @@ async function measure(
 		session.disconnect();
 	}
 	console.log(
-		`${name.padEnd(36)} ${samples[3]?.toFixed(2).padStart(10)} µs/batch ${(allocatedBytes / iterations / 1_024).toFixed(2).padStart(10)} KiB allocated/batch`,
+		`${name.padEnd(44)} ${samples[3]?.toFixed(2).padStart(10)} µs/batch ${(allocatedBytes / iterations / 1_024).toFixed(2).padStart(10)} KiB allocated/batch`,
 	);
 }
 
@@ -104,20 +107,35 @@ for (const count of [1, 100, 700]) {
 				checksum ^= (await sdk.aggregateDecodedCalls(provider, calls)).length;
 		},
 	);
-	const abiCalls: GhostcallAbiCall[] = Array.from({ length: count }, () => ({
-		to,
-		abi,
-		functionName: "balanceOf",
-		args: [to],
-	}));
-	await measure(
-		`aggregateDecodedCalls ABI (${count})`,
-		iterations,
-		async (iterations) => {
-			for (let index = 0; index < iterations; index += 1)
-				checksum ^= (await sdk.aggregateDecodedCalls(provider, abiCalls))
-					.length;
-		},
-	);
+	const abiCases: [string, () => GhostcallAbiCall][] = [
+		["ABI", () => ({ to, abi, functionName: "balanceOf", args: [to] })],
+		// Overloaded names cannot share one resolution, so each call resolves its own.
+		[
+			"overloaded ABI",
+			() => ({ to, abi: overloadedAbi, functionName: "balanceOf", args: [to] }),
+		],
+		// Resolutions are shared per ABI object, so separate objects share nothing.
+		[
+			"per-call ABI",
+			() => ({
+				to,
+				abi: parseAbi([balanceOf]),
+				functionName: "balanceOf",
+				args: [to],
+			}),
+		],
+	];
+	for (const [label, createCall] of abiCases) {
+		const abiCalls = Array.from({ length: count }, createCall);
+		await measure(
+			`aggregateDecodedCalls ${label} (${count})`,
+			iterations,
+			async (iterations) => {
+				for (let index = 0; index < iterations; index += 1)
+					checksum ^= (await sdk.aggregateDecodedCalls(provider, abiCalls))
+						.length;
+			},
+		);
+	}
 }
 console.log(`Checksum: ${checksum}`);

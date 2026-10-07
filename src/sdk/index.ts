@@ -5,6 +5,7 @@ import {
 	type GhostcallAbiCall,
 	type GhostcallAbiResult,
 	prepareAbiCall,
+	type ResolvedAbiFunctions,
 } from "./abi.ts";
 import { ghostcallInitcode } from "./generated/initcode.ts";
 
@@ -202,8 +203,9 @@ async function aggregateDecodedCalls<
 	calls: TCalls & NoInfer<ValidatedDecodedCalls<TCalls>>,
 	options?: GhostcallAggregateOptions,
 ): Promise<GhostcallDecodedResults<TCalls>> {
+	const resolvedFunctions: ResolvedAbiFunctions = new Map();
 	const preparedCalls = calls.map((call) =>
-		call.abi === undefined ? call : prepareAbiCall(call),
+		call.abi === undefined ? call : prepareAbiCall(call, resolvedFunctions),
 	);
 	const entries = await aggregateCalls(provider, preparedCalls, options);
 	return entries.map((entry, index) => {
