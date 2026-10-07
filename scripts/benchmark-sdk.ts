@@ -95,18 +95,10 @@ for (const count of [1, 100, 700]) {
 		for (let index = 0; index < iterations; index += 1)
 			checksum ^= sdk.decodeResults(response).length;
 	});
-	await measure(`aggregateCalls (${count})`, iterations, async (iterations) => {
-		for (let index = 0; index < iterations; index += 1)
-			checksum ^= (await sdk.aggregateCalls(provider, calls)).length;
-	});
-	await measure(
-		`aggregateDecodedCalls (${count})`,
-		iterations,
-		async (iterations) => {
-			for (let index = 0; index < iterations; index += 1)
-				checksum ^= (await sdk.aggregateDecodedCalls(provider, calls)).length;
-		},
-	);
+	const batchCases: [string, () => Promise<unknown[]>][] = [
+		["aggregateCalls", () => sdk.aggregateCalls(provider, calls)],
+		["aggregateDecodedCalls", () => sdk.aggregateDecodedCalls(provider, calls)],
+	];
 	const abiCases: [string, () => GhostcallAbiCall][] = [
 		["ABI", () => ({ to, abi, functionName: "balanceOf", args: [to] })],
 		// Overloaded names cannot share one resolution, so each call resolves its own.
@@ -127,15 +119,16 @@ for (const count of [1, 100, 700]) {
 	];
 	for (const [label, createCall] of abiCases) {
 		const abiCalls = Array.from({ length: count }, createCall);
-		await measure(
-			`aggregateDecodedCalls ${label} (${count})`,
-			iterations,
-			async (iterations) => {
-				for (let index = 0; index < iterations; index += 1)
-					checksum ^= (await sdk.aggregateDecodedCalls(provider, abiCalls))
-						.length;
-			},
-		);
+		batchCases.push([
+			`aggregateDecodedCalls ${label}`,
+			() => sdk.aggregateDecodedCalls(provider, abiCalls),
+		]);
+	}
+	for (const [name, runBatch] of batchCases) {
+		await measure(`${name} (${count})`, iterations, async (iterations) => {
+			for (let index = 0; index < iterations; index += 1)
+				checksum ^= (await runBatch()).length;
+		});
 	}
 }
 console.log(`Checksum: ${checksum}`);

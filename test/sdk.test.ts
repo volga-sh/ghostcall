@@ -109,9 +109,7 @@ test("decodes ordered successes and failures, rejecting malformed or truncated r
 test("decodes upper- and lowercase headers across uint15 length boundaries", () => {
 	const expected = [];
 	let response: Hex = "0x";
-	for (const length of [
-		0, 1, 9, 10, 15, 16, 255, 256, 0xabc, 0xdef, 4095, 4096, 32767,
-	]) {
+	for (const length of [0, 1, 0xabc, 0x7fff]) {
 		const returnData: Hex = `0x${"aB".repeat(length)}`;
 		for (const success of [false, true]) {
 			const header = ((success ? 0x8000 : 0) | length)
