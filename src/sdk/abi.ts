@@ -66,40 +66,35 @@ type GhostcallAbiResult<TCall extends GhostcallAbiCall> =
  * Functions resolved within one batch, keyed by ABI object and function name.
  * `null` marks a name that must be resolved per call from its arguments.
  */
-type SharedFunctions = Map<Abi, Map<string, AbiFunction.AbiFunction | null>>;
+type FunctionsByName = Map<string, AbiFunction.AbiFunction | null>;
+type SharedFunctions = Map<Abi, FunctionsByName>;
 
-/** Turn ABI calls into raw decoded calls; raw decoded calls pass through unchanged. */
+/**
+ * Turn ABI calls into raw decoded calls that encode and decode with the same
+ * resolved function. Raw decoded calls pass through unchanged.
+ */
 function prepareDecodedCalls(
 	calls: readonly (GhostcallAbiCall | GhostcallDecodedCall)[],
 ): GhostcallDecodedCall[] {
 	const sharedFunctions: SharedFunctions = new Map();
-	return calls.map((call) =>
-		call.abi === undefined ? call : prepareAbiCall(call, sharedFunctions),
-	);
-}
-
-/** Bind encoding and decoding to the same resolved ABI function. */
-function prepareAbiCall(
-	call: GhostcallAbiCall,
-	sharedFunctions: SharedFunctions,
-): GhostcallDecodedCall {
-	const args = call.args ?? [];
-	const abiFunction = resolveAbiFunction(call, args, sharedFunctions);
-
-	// ox permits selector-only encoding with no args. At this wire boundary,
-	// missing arguments must fail before RPC, including for dynamically loaded ABIs.
-	if (args.length !== abiFunction.inputs.length) {
-		throw new TypeError(
-			`${call.functionName} expects ${abiFunction.inputs.length} arguments, received ${args.length}`,
-		);
-	}
-
-	return {
-		to: call.to,
-		data: AbiFunction.encodeData(abiFunction, args),
-		decodeResult: (returnData) =>
-			AbiFunction.decodeResult(abiFunction, returnData),
-	};
+	return calls.map((call): GhostcallDecodedCall => {
+		if (call.abi === undefined) return call;
+		const args = call.args ?? [];
+		const abiFunction = resolveAbiFunction(call, args, sharedFunctions);
+		// ox encodes only the selector when args are missing, so reject that
+		// before RPC; literal ABIs catch it in types, runtime-loaded ABIs cannot.
+		if (args.length !== abiFunction.inputs.length) {
+			throw new TypeError(
+				`${call.functionName} expects ${abiFunction.inputs.length} arguments, received ${args.length}`,
+			);
+		}
+		return {
+			to: call.to,
+			data: AbiFunction.encodeData(abiFunction, args),
+			decodeResult: (returnData) =>
+				AbiFunction.decodeResult(abiFunction, returnData),
+		};
+	});
 }
 
 // Each ox lookup hashes the function signature, so a batch resolves each name
@@ -110,18 +105,17 @@ function resolveAbiFunction(
 	args: readonly unknown[],
 	sharedFunctions: SharedFunctions,
 ): AbiFunction.AbiFunction {
-	let functions = sharedFunctions.get(call.abi);
-	if (functions === undefined) {
-		functions = new Map();
-		sharedFunctions.set(call.abi, functions);
-	}
+	const functions: FunctionsByName = sharedFunctions.get(call.abi) ?? new Map();
+	sharedFunctions.set(call.abi, functions);
 	let shared = functions.get(call.functionName);
 	if (shared === undefined) {
-		const isUnique =
-			call.abi.filter(
-				(item) => "name" in item && item.name === call.functionName,
-			).length === 1;
-		shared = isUnique ? AbiFunction.fromAbi(call.abi, call.functionName) : null;
+		const matches = call.abi.filter(
+			(item) => "name" in item && item.name === call.functionName,
+		);
+		shared =
+			matches.length === 1
+				? AbiFunction.fromAbi(call.abi, call.functionName)
+				: null;
 		functions.set(call.functionName, shared);
 	}
 	return shared ?? AbiFunction.fromAbi(call.abi, call.functionName, { args });

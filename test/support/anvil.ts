@@ -49,21 +49,12 @@ async function startAnvil(
 	}
 }
 
+// Anvil state is disposable, so there is nothing to shut down gracefully.
 async function stopAnvil(child: ChildProcess): Promise<void> {
-	if (child.exitCode !== null || child.signalCode !== null) {
-		return;
-	}
-
+	if (child.exitCode !== null || child.signalCode !== null) return;
 	const exit = once(child, "exit");
-	child.kill("SIGTERM");
-
-	// The fallback timer must not keep the test process alive after Anvil exits.
-	await Promise.race([exit, sleep(2_000, undefined, { ref: false })]);
-
-	if (child.exitCode === null && child.signalCode === null) {
-		child.kill("SIGKILL");
-		await exit;
-	}
+	child.kill("SIGKILL");
+	await exit;
 }
 
 async function deployContract(
@@ -92,7 +83,16 @@ async function sendTransaction(
 		],
 	});
 
-	const receipt = await waitForReceipt(transport, hash);
+	// Anvil mines after returning the hash, so poll briefly for the receipt.
+	let receipt: TransactionReceipt.Rpc | null = null;
+	for (let attempt = 0; receipt === null && attempt < 1_000; attempt += 1) {
+		if (attempt > 0) await sleep(10);
+		receipt = await transport.request({
+			method: "eth_getTransactionReceipt",
+			params: [hash],
+		});
+	}
+	assert.ok(receipt, `Timed out waiting for receipt for ${hash}`);
 	assert.equal(
 		receipt.status,
 		"0x1",
@@ -100,28 +100,6 @@ async function sendTransaction(
 	);
 
 	return receipt;
-}
-
-async function waitForReceipt(
-	transport: Transport,
-	hash: Hex,
-): Promise<TransactionReceipt.Rpc> {
-	const timeoutAt = Date.now() + 10_000;
-
-	while (Date.now() < timeoutAt) {
-		const receipt = await transport.request({
-			method: "eth_getTransactionReceipt",
-			params: [hash],
-		});
-
-		if (receipt) {
-			return receipt;
-		}
-
-		await sleep(100);
-	}
-
-	throw new Error(`Timed out waiting for receipt for ${hash}`);
 }
 
 export type { Transport };

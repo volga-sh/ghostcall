@@ -123,8 +123,7 @@ function encodeCalls(
 	const sizeError = `encoded ghostcall initcode exceeds the ${maxInitcodeBytes}-byte CREATE initcode limit`;
 	if (totalEncodedSize > maxInitcodeBytes) throw new RangeError(sizeError);
 
-	let index = 0;
-	for (const call of calls) {
+	calls.forEach((call, index) => {
 		const to = assertAddress(call.to, `calls[${index}].to`);
 		const calldata = assertHex(call.data, `calls[${index}].data`);
 		const calldataSize = hexSize(calldata);
@@ -139,8 +138,7 @@ function encodeCalls(
 			.toString(16)
 			.padStart(calldataLengthHexChars, "0");
 		encodedData = `${encodedData}${header}${to.slice(2)}${calldata.slice(2)}`;
-		index += 1;
-	}
+	});
 	return encodedData;
 }
 
@@ -154,14 +152,12 @@ async function aggregateCalls(
 	options?: GhostcallAggregateOptions,
 ): Promise<GhostcallResult[]> {
 	const results = await executeCalls(provider, calls, options);
-	let index = 0;
-	for (const result of results) {
+	results.forEach(({ success, returnData }, index) => {
 		const call = calls[index] as GhostcallCall;
-		if (!result.success && !call.allowFailure) {
-			throw new GhostcallSubcallError(index, call, result.returnData);
+		if (!success && !call.allowFailure) {
+			throw new GhostcallSubcallError(index, call, returnData);
 		}
-		index += 1;
-	}
+	});
 	return results;
 }
 
@@ -198,16 +194,13 @@ async function executeCalls(
 	options: GhostcallAggregateOptions = {},
 ): Promise<GhostcallResult[]> {
 	const { from, gas, blockTag = "latest" } = options.ethCall ?? {};
-	const ethCall: { data: Hex; from?: Hex; gas?: Hex } = {
+	const ethCall = {
 		data: encodeCalls(calls, options),
+		...(from !== undefined && {
+			from: assertAddress(from, "options.ethCall.from"),
+		}),
+		...(gas !== undefined && { gas: toQuantity(gas) }),
 	};
-	if (from !== undefined) {
-		ethCall.from = assertAddress(from, "options.ethCall.from");
-	}
-	if (gas !== undefined) {
-		ethCall.gas = toQuantity(gas);
-	}
-
 	const response = await provider.request({
 		method: "eth_call",
 		params: [
@@ -231,23 +224,14 @@ function decodeValidatedResults(data: Hex): GhostcallResult[] {
 	const results: GhostcallResult[] = [];
 	let cursor = 2;
 	while (cursor < data.length) {
-		if (cursor + resultHeaderHexChars > data.length) {
-			throw new TypeError("Truncated ghostcall response header");
-		}
-		const header = Number.parseInt(
-			data.slice(cursor, cursor + resultHeaderHexChars),
-			16,
-		);
-		cursor += resultHeaderHexChars;
-		const returnDataEnd = cursor + (header & returnDataLengthMask) * 2;
-		if (returnDataEnd > data.length) {
-			throw new TypeError("Truncated ghostcall response body");
-		}
-		results.push({
-			success: (header & successFlag) !== 0,
-			returnData: `0x${data.slice(cursor, returnDataEnd)}`,
-		});
-		cursor = returnDataEnd;
+		const start = cursor + resultHeaderHexChars;
+		const header = Number.parseInt(data.slice(cursor, start), 16);
+		cursor = start + (header & returnDataLengthMask) * 2;
+		// A partial header also ends past the data, so one check covers both cases.
+		if (cursor > data.length)
+			throw new TypeError("Truncated ghostcall response");
+		const success = (header & successFlag) !== 0;
+		results.push({ success, returnData: `0x${data.slice(start, cursor)}` });
 	}
 	return results;
 }

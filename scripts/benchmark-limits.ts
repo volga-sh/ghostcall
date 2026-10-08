@@ -47,19 +47,11 @@ type BenchmarkReport = {
 	blockTag: string;
 	from: Hex;
 	gas: Hex | null;
-	timeoutMs: number;
 	ghostcallInitcodeBytes: number;
 	rawInitcode: LimitResult | null;
 	rawRuntime: LimitResult | null;
 	balances:
-		| (LimitResult & {
-				tokenCount: number;
-				ownerCount: number;
-				fullCreateDataBytes: number;
-				returnedBytes: number;
-				inputBytesPerCall: number;
-				returnedBytesPerCall: number;
-		  })
+		| (LimitResult & { fullCreateDataBytes: number; returnedBytes: number })
 		| null;
 };
 
@@ -69,7 +61,7 @@ const balanceInputBytesPerCall = 2 + 20 + 4 + 32;
 const balanceReturnedBytesPerCall = 2 + 32;
 // PUSH1 0 PUSH1 0 RETURN: initcode that returns empty runtime code.
 const emptyRuntimeInitcode = "60006000f3";
-const prettyInteger = new Intl.NumberFormat("en-US");
+const format = new Intl.NumberFormat("en-US").format;
 
 const usage = `Usage:
   npm run benchmark:limits -- --rpc-url <url> --mode raw
@@ -139,7 +131,15 @@ function parseBenchmarkArgs(
 			assertAddress(address, `--${name}[${index}]`),
 		);
 	};
-	const integer = (name: keyof typeof values, raw: string): number => {
+	const integer = (
+		name:
+			| "gas"
+			| "timeout-ms"
+			| "max-calls"
+			| "max-initcode-bytes"
+			| "max-runtime-bytes",
+	): number => {
+		const raw = values[name] ?? "";
 		const value = Number(raw);
 		if (raw.trim() === "" || !Number.isSafeInteger(value) || value < 0) {
 			throw new Error(
@@ -149,7 +149,7 @@ function parseBenchmarkArgs(
 		return value;
 	};
 
-	const config: BenchmarkConfig = {
+	return {
 		rpcUrl,
 		mode,
 		tokens: addresses("token", "GHOSTCALL_BENCH_TOKENS"),
@@ -158,19 +158,15 @@ function parseBenchmarkArgs(
 			? `0x${BigInt(values.block).toString(16)}`
 			: values.block,
 		from: assertAddress(values.from, "--from"),
-		timeoutMs: integer("timeout-ms", values["timeout-ms"]),
-		maxCalls: integer("max-calls", values["max-calls"]),
-		maxInitcodeBytes: integer(
-			"max-initcode-bytes",
-			values["max-initcode-bytes"],
-		),
-		maxRuntimeBytes: integer("max-runtime-bytes", values["max-runtime-bytes"]),
+		...(values.gas !== undefined && {
+			gas: `0x${integer("gas").toString(16)}`,
+		}),
+		timeoutMs: integer("timeout-ms"),
+		maxCalls: integer("max-calls"),
+		maxInitcodeBytes: integer("max-initcode-bytes"),
+		maxRuntimeBytes: integer("max-runtime-bytes"),
 		json: values.json,
 	};
-	if (values.gas !== undefined) {
-		config.gas = `0x${integer("gas", values.gas).toString(16)}`;
-	}
-	return config;
 }
 
 /**
@@ -211,75 +207,48 @@ function createRawRuntimeReturnProbe(sizeBytes: number): Hex {
 }
 
 /**
- * Find the largest passing candidate with exponential then binary search.
- * `probe` returns null on success or a short failure reason; unexpected
- * conditions should throw so bad inputs stay separate from size failures.
+ * Find the largest passing candidate: double from `min` until a probe fails or
+ * reaches `max`, then binary-search the gap. `probe` returns null on success or
+ * a short failure reason; unexpected conditions should throw.
  */
 async function findLimit(
 	min: number,
 	max: number,
 	probe: (candidate: number) => Promise<string | null>,
 ): Promise<LimitResult> {
-	if (max < min) {
-		return {
-			maxPass: min - 1,
-			firstFail: min,
-			exhaustedConfiguredMax: false,
-			configuredMax: max,
-			attempts: 0,
-			failure: `configured max ${max} is below minimum candidate ${min}`,
-		};
-	}
-
-	let attempts = 0;
-	let maxPass = min - 1;
-	let firstFail: number | null = null;
-	let failure: string | null = null;
-
-	for (let candidate = min; ; candidate = Math.min(candidate * 2, max)) {
-		attempts += 1;
-		failure = await probe(candidate);
-		if (failure !== null) {
-			firstFail = candidate;
-			break;
-		}
-		maxPass = candidate;
-		if (candidate === max) {
-			return {
-				maxPass,
-				firstFail: null,
-				exhaustedConfiguredMax: true,
-				configuredMax: max,
-				attempts,
-				failure: null,
-			};
-		}
-	}
-
-	let low = maxPass + 1;
-	let high = firstFail - 1;
-	while (low <= high) {
-		const candidate = Math.floor((low + high) / 2);
-		attempts += 1;
-		const candidateFailure = await probe(candidate);
-		if (candidateFailure === null) {
-			maxPass = candidate;
-			low = candidate + 1;
-		} else {
-			firstFail = candidate;
-			failure = candidateFailure;
-			high = candidate - 1;
-		}
-	}
-
-	return {
-		maxPass,
-		firstFail,
+	const result: LimitResult = {
+		maxPass: min - 1,
+		firstFail: null,
 		exhaustedConfiguredMax: false,
 		configuredMax: max,
-		attempts,
-		failure,
+		attempts: 0,
+		failure: null,
 	};
+	if (max < min) {
+		const failure = `configured max ${max} is below minimum candidate ${min}`;
+		return { ...result, firstFail: min, failure };
+	}
+	const passes = async (candidate: number): Promise<boolean> => {
+		result.attempts += 1;
+		const failure = await probe(candidate);
+		if (failure === null) result.maxPass = candidate;
+		else Object.assign(result, { firstFail: candidate, failure });
+		return failure === null;
+	};
+
+	let candidate = min;
+	while ((await passes(candidate)) && candidate < max) {
+		candidate = Math.min(candidate * 2, max);
+	}
+	let low = result.maxPass + 1;
+	let high = (result.firstFail ?? max + 1) - 1;
+	while (low <= high) {
+		const middle = Math.floor((low + high) / 2);
+		if (await passes(middle)) low = middle + 1;
+		else high = middle - 1;
+	}
+	result.exhaustedConfiguredMax = result.firstFail === null;
+	return result;
 }
 
 /**
@@ -300,8 +269,10 @@ async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
 		}
 		return result as Hex;
 	};
-	const ethCall: { from: Hex; gas?: Hex } = { from: config.from };
-	if (config.gas !== undefined) ethCall.gas = config.gas;
+	const ethCall = {
+		from: config.from,
+		...(config.gas !== undefined && { gas: config.gas }),
+	};
 	// RPC errors are probe failures; `check` decides whether the result passes.
 	const probe = async (
 		data: Hex,
@@ -316,12 +287,11 @@ async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
 		return check(result);
 	};
 
+	// Fail fast on an unreachable endpoint before running any probes.
 	const chainId = await rpc("eth_chainId", []);
 	const latestBlock = await rpc("eth_blockNumber", []);
 	const ghostcallInitcodeBytes = hexSize(encodeCalls([]));
 	const runsRaw = config.mode !== "balances";
-	const runsBalances = config.mode !== "raw";
-
 	const rawInitcode = runsRaw
 		? await findLimit(
 				emptyRuntimeInitcode.length / 2,
@@ -334,7 +304,6 @@ async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
 					),
 			)
 		: null;
-
 	const rawRuntime = runsRaw
 		? await findLimit(1, config.maxRuntimeBytes, (size) =>
 				probe(createRawRuntimeReturnProbe(size), (result) =>
@@ -344,28 +313,25 @@ async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
 				),
 			)
 		: null;
-
-	const maxBalanceCallsByInitcode = Math.max(
-		0,
-		Math.floor(
-			(config.maxInitcodeBytes - ghostcallInitcodeBytes) /
-				balanceInputBytesPerCall,
-		),
+	const balanceCallsByInitcode = Math.floor(
+		(config.maxInitcodeBytes - ghostcallInitcodeBytes) /
+			balanceInputBytesPerCall,
 	);
-	const balanceLimit = runsBalances
-		? await findLimit(
-				1,
-				Math.min(config.maxCalls, maxBalanceCallsByInitcode),
-				(count) =>
-					probe(
-						encodeCalls(
-							buildBalanceCalls(count, config.tokens, config.owners),
-							{ maxInitcodeBytes: config.maxInitcodeBytes },
+	const balances =
+		config.mode === "raw"
+			? null
+			: await findLimit(
+					1,
+					Math.min(config.maxCalls, balanceCallsByInitcode),
+					(count) =>
+						probe(
+							encodeCalls(
+								buildBalanceCalls(count, config.tokens, config.owners),
+								{ maxInitcodeBytes: config.maxInitcodeBytes },
+							),
+							(result) => balanceFailure(result, count),
 						),
-						(result) => balanceFailure(result, count),
-					),
-			)
-		: null;
+				);
 
 	return {
 		chainId,
@@ -373,24 +339,15 @@ async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
 		blockTag: config.blockTag,
 		from: config.from,
 		gas: config.gas ?? null,
-		timeoutMs: config.timeoutMs,
 		ghostcallInitcodeBytes,
 		rawInitcode,
 		rawRuntime,
-		balances:
-			balanceLimit === null
-				? null
-				: {
-						...balanceLimit,
-						tokenCount: config.tokens.length,
-						ownerCount: config.owners.length,
-						fullCreateDataBytes:
-							ghostcallInitcodeBytes +
-							balanceLimit.maxPass * balanceInputBytesPerCall,
-						returnedBytes: balanceLimit.maxPass * balanceReturnedBytesPerCall,
-						inputBytesPerCall: balanceInputBytesPerCall,
-						returnedBytesPerCall: balanceReturnedBytesPerCall,
-					},
+		balances: balances && {
+			...balances,
+			fullCreateDataBytes:
+				ghostcallInitcodeBytes + balances.maxPass * balanceInputBytesPerCall,
+			returnedBytes: balances.maxPass * balanceReturnedBytesPerCall,
+		},
 	};
 }
 
@@ -401,13 +358,12 @@ function balanceFailure(result: Hex, count: number): string | null {
 			`expected ${count} result entries, received ${entries.length}`,
 		);
 	}
-	for (const [index, entry] of entries.entries()) {
-		if (!entry.success) {
+	for (const [index, { success, returnData }] of entries.entries()) {
+		if (!success)
 			return `balanceOf call ${index} returned a failed result entry`;
-		}
-		if (hexSize(entry.returnData) !== 32) {
+		if (hexSize(returnData) !== 32) {
 			throw new Error(
-				`balanceOf call ${index} returned ${hexSize(entry.returnData)} bytes instead of 32`,
+				`balanceOf call ${index} returned ${hexSize(returnData)} bytes`,
 			);
 		}
 	}
@@ -423,52 +379,33 @@ function formatBenchmarkReport(report: BenchmarkReport): string {
 		`block tag: ${report.blockTag}`,
 		`from: ${report.from}`,
 		`gas: ${report.gas ?? "provider default"}`,
-		`timeout: ${format(report.timeoutMs)} ms`,
 		`ghostcall initcode: ${format(report.ghostcallInitcodeBytes)} bytes`,
 	];
-	if (report.rawInitcode !== null) {
+	const sections = [
+		["raw initcode size", report.rawInitcode, "bytes"],
+		["raw returned runtime code", report.rawRuntime, "bytes"],
+		["ERC-20 balanceOf ghostcall batch", report.balances, "calls"],
+	] as const;
+	for (const [title, result, unit] of sections) {
+		if (result === null) continue;
 		lines.push(
 			"",
-			"raw initcode size",
-			formatLimit(report.rawInitcode, "bytes"),
-		);
-	}
-	if (report.rawRuntime !== null) {
-		lines.push(
-			"",
-			"raw returned runtime code",
-			formatLimit(report.rawRuntime, "bytes"),
+			title,
+			result.exhaustedConfiguredMax
+				? `max pass: >= ${format(result.maxPass)} ${unit}`
+				: `max pass: ${format(result.maxPass)} ${unit}; first fail ${format(result.firstFail ?? 0)} ${unit}`,
+			`attempts: ${format(result.attempts)}`,
+			`first failure: ${result.failure ?? "none before configured max"}`,
 		);
 	}
 	if (report.balances !== null) {
-		const { balances } = report;
 		lines.push(
-			"",
-			"ERC-20 balanceOf ghostcall batch",
-			`token inputs: ${format(balances.tokenCount)}`,
-			`owner inputs: ${format(balances.ownerCount)}`,
-			formatLimit(balances, "calls"),
-			`full CREATE data: ${format(balances.fullCreateDataBytes)} bytes`,
-			`returned bytes: ${format(balances.returnedBytes)} bytes`,
-			`per call input/return: ${balances.inputBytesPerCall}/${balances.returnedBytesPerCall} bytes`,
+			`full CREATE data: ${format(report.balances.fullCreateDataBytes)} bytes`,
+			`returned bytes: ${format(report.balances.returnedBytes)} bytes`,
+			`per call input/return: ${balanceInputBytesPerCall}/${balanceReturnedBytesPerCall} bytes`,
 		);
 	}
 	return lines.join("\n");
-}
-
-function formatLimit(result: LimitResult, unit: string): string {
-	const limit = result.exhaustedConfiguredMax
-		? `max pass: >= ${format(result.maxPass)} ${unit}`
-		: `max pass: ${format(result.maxPass)} ${unit}; first fail ${format(result.firstFail ?? 0)} ${unit}`;
-	return [
-		limit,
-		`attempts: ${format(result.attempts)}`,
-		`first failure: ${result.failure ?? "none before configured max"}`,
-	].join("\n");
-}
-
-function format(value: number): string {
-	return prettyInteger.format(value);
 }
 
 function assertAddress(value: string, label: string): Hex {
