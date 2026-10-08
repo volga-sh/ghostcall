@@ -6,7 +6,7 @@ description: Inspect a contract call that caused a batch to throw.
 `aggregateDecodedCalls()` throws `GhostcallSubcallError` for any failed call.
 `aggregateCalls()` throws it unless that entry sets `allowFailure: true`.
 
-```ts
+```ts twoslash
 import { aggregateCalls, GhostcallSubcallError } from "@volga-sh/evm-ghostcall";
 
 try {

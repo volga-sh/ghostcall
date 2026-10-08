@@ -29,9 +29,13 @@ The bundled ghostcall program is currently `91` bytes.
 `encodeCalls()` uses `49,152` as its default limit. Pass `maxInitcodeBytes` to
 set a different ceiling:
 
-```ts
+```ts twoslash
+import { encodeCalls, type GhostcallCall } from "@volga-sh/evm-ghostcall";
+declare const calls: GhostcallCall[];
+// ---cut---
 const data = encodeCalls(calls, {
 	maxInitcodeBytes: 32_000,
+	// ^?
 });
 ```
 

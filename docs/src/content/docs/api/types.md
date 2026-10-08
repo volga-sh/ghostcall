@@ -6,34 +6,21 @@ description: The public TypeScript types exported by ghostcall.
 Import types from `@volga-sh/evm-ghostcall`. Function pages link here instead of
 repeating these definitions.
 
-```ts
-type Hex = `0x${string}`;
-
-type GhostcallCall = {
-	to: Hex;
-	data: Hex;
-	// aggregateCalls() only: return this failure instead of throwing.
-	allowFailure?: boolean;
-};
-
-type GhostcallResult = { success: boolean; returnData: Hex };
-
-type GhostcallProvider = {
-	request(args: { method: string; params?: unknown }): Promise<unknown>;
-};
-
-type GhostcallEncodeOptions = {
-	maxInitcodeBytes?: number; // Default: 49,152, the full CREATE request.
-};
-
-type GhostcallAggregateOptions = GhostcallEncodeOptions & {
-	ethCall?: {
-		from?: Hex;
-		gas?: bigint;
-		// Default: "latest".
-		blockTag?: bigint | "latest" | "earliest" | "pending" | "safe" | "finalized";
-	};
-};
+```ts twoslash
+import type {
+	Hex,
+// ^?
+	GhostcallCall,
+// ^?
+	GhostcallResult,
+// ^?
+	GhostcallProvider,
+// ^?
+	GhostcallEncodeOptions,
+// ^?
+	GhostcallAggregateOptions,
+// ^?
+} from "@volga-sh/evm-ghostcall";
 ```
 
 Addresses must contain 20 bytes. Calldata and returndata must be even-length,
@@ -41,14 +28,19 @@ Addresses must contain 20 bytes. Calldata and returndata must be even-length,
 express them; every other option is checked only by its type. Block numbers and
 `gas` are sent as RPC hex quantities.
 
+`allowFailure` applies only to `aggregateCalls()`: set it to `true` to return a
+failed entry instead of throwing. It defaults to `false`.
+`maxInitcodeBytes` defaults to `49,152` bytes for the full CREATE request.
+`ethCall.blockTag` defaults to `"latest"`.
+
 `GhostcallAbiCall<TAbi>` and `GhostcallDecodedCall<TResult>` are the two entry
 forms accepted by [`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/): an
 ABI function call, or raw calldata with a custom decoder returning `TResult`.
 
 ## Declaring reusable calls
 
-```ts
-import type { GhostcallAbiCall } from "@volga-sh/evm-ghostcall";
+```ts twoslash
+import { aggregateDecodedCalls, type GhostcallAbiCall } from "@volga-sh/evm-ghostcall";
 import { Abi } from "ox";
 
 const abi = Abi.from(["function balanceOf(address owner) view returns (uint256)"]);
@@ -57,6 +49,9 @@ const owner = "0x28C6c06298d514Db089934071355E5743bf21d60";
 const calls = [
 	{ to: token, abi, functionName: "balanceOf", args: [owner] },
 ] as const satisfies readonly GhostcallAbiCall<typeof abi>[];
+
+const results = await aggregateDecodedCalls(client, calls);
+//    ^?
 ```
 
 `aggregateDecodedCalls()` infers each tuple position, including argument-selected

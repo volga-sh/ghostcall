@@ -9,12 +9,13 @@ flags or revert data are needed, or when selected calls may fail.
 
 ## Usage
 
-```ts
+```ts twoslash
 import { aggregateCalls } from "@volga-sh/evm-ghostcall";
 
 const weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 
 const results = await aggregateCalls(client, [
+//    ^?
 	// totalSupply()
 	{ to: weth, data: "0x18160ddd" },
 	// If this call reverts, it returns success: false instead of throwing.
@@ -26,12 +27,9 @@ for (const { success, returnData } of results) console.log(success, returnData);
 
 ## Signature
 
-```ts
-async function aggregateCalls(
-	provider: GhostcallProvider,
-	calls: readonly GhostcallCall[],
-	options?: GhostcallAggregateOptions,
-): Promise<GhostcallResult[]>;
+```ts twoslash
+import { aggregateCalls } from "@volga-sh/evm-ghostcall";
+//       ^?
 ```
 
 See [Types](/api/types/) for each type.
@@ -49,10 +47,14 @@ See [Types](/api/types/) for each type.
 a named tag and defaults to `"latest"`. Omitted `from` and `gas` use provider
 defaults.
 
-```ts
+```ts twoslash
+import { aggregateCalls } from "@volga-sh/evm-ghostcall";
+const weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+// ---cut---
 const [result] = await aggregateCalls(client, [{ to: weth, data: "0x18160ddd" }], {
 	ethCall: {
 		blockTag: 19_000_000n,
+		// ^?
 		from: "0x0000000000000000000000000000000000000000",
 		gas: 3_000_000n,
 	},

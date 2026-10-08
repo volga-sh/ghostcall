@@ -63,6 +63,19 @@ npm run docs:preview
 Documentation source files live in `docs/src`. The static build is written to
 `docs/dist`.
 
+Code blocks marked `ts twoslash` are type-checked against `src/sdk` and render
+editor hovers; a type error fails `docs:build`. Examples can use a global
+`client` provider. See the [twoslash syntax](https://twoslash.studiocms.dev/)
+for queries (`// ^?`) and hidden code (`// ---cut---`).
+
+Reference signatures and type definitions use queries on SDK imports, so they
+follow the source without maintaining separate declarations or drift checks.
+
+The docs pin TypeScript 5.9 because twoslash needs the compiler API that
+TypeScript 7 does not ship, and override expressive-code-twoslash's peer range
+to the expressive-code version Starlight installs. Update that override when
+upgrading Starlight.
+
 npm 12 blocks dependency install scripts by default. `docs/package.json` allows
 the pinned esbuild binary setup script; fsevents uses its bundled macOS binary
 without rebuilding it. Review and update the esbuild approval when its version

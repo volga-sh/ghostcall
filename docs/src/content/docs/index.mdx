@@ -39,14 +39,14 @@ This example reads the WETH total supply and one account balance on Ethereum.
 ghostcall sends both reads in one RPC request and returns decoded `bigint`
 values in the same order.
 
-```ts title="Listing 2.1 · TypeScript"
+```ts twoslash title="Listing 2.1 · TypeScript"
 import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
 import { erc20Abi } from "viem";
 
 const token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const account = "0x28C6c06298d514Db089934071355E5743bf21d60";
 
-const [supply, balance] = await aggregateDecodedCalls(provider, [
+const [supply, balance] = await aggregateDecodedCalls(client, [
 	{
 		to: token,
 		abi: erc20Abi,

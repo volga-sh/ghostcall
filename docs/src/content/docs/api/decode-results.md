@@ -10,10 +10,11 @@ description: Parse the raw response returned by ghostcall.
 
 ## Usage
 
-```ts
+```ts twoslash
 import { decodeResults } from "@volga-sh/evm-ghostcall";
 
-decodeResults("0x8002cafe0004deadbeef");
+const results = decodeResults("0x8002cafe0004deadbeef");
+//    ^?
 // [
 //   { success: true, returnData: "0xcafe" },
 //   { success: false, returnData: "0xdeadbeef" },
@@ -22,8 +23,9 @@ decodeResults("0x8002cafe0004deadbeef");
 
 ## Signature
 
-```ts
-function decodeResults(data: Hex): GhostcallResult[];
+```ts twoslash
+import { decodeResults } from "@volga-sh/evm-ghostcall";
+//       ^?
 ```
 
 `decodeResults("0x")` returns `[]`. The function applies no failure policy,

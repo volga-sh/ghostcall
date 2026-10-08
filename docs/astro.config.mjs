@@ -1,5 +1,6 @@
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
+import { failOnTwoslashErrors, twoslash } from "./twoslash.mjs";
 
 const site = "https://ghostcall.volga.sh";
 const socialImage = new URL("/og.png", site).href;
@@ -27,7 +28,14 @@ export default defineConfig({
 						inlineButtonForeground: "var(--gc-code-ink)",
 						frameBoxShadowCssValue: "none",
 					},
+					twoSlash: {
+						background: "var(--gc-surface)",
+						borderColor: "var(--gc-rule-strong)",
+						completionBoxBorder: "var(--gc-rule-strong)",
+						completionBoxMatchedColor: "var(--gc-accent)",
+					},
 				},
+				plugins: [twoslash],
 			},
 			head: [
 				{
@@ -129,5 +137,6 @@ export default defineConfig({
 				},
 			],
 		}),
+		failOnTwoslashErrors,
 	],
 });

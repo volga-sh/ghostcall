@@ -191,6 +191,29 @@ site-search dialog {
 	scrollbar-color: #aab2bb var(--gc-code);
 }
 
+/* Twoslash popups render types as nested code blocks: drop their frame and
+   the empty title bar that a titled outer block's rules would draw. */
+.twoslash-popup-code .expressive-code figure.frame {
+	border: 0;
+}
+
+.twoslash-popup-code
+	.twoslash-popup-code-type
+	.expressive-code
+	.frame
+	figcaption.header {
+	display: none;
+}
+
+.expressive-code
+	:is(
+		.twoslash-popup-container,
+		.twoslash-static-container,
+		.twoslash-completion-container
+	) {
+	border-radius: 0;
+}
+
 .expressive-code .copy button {
 	border: 1px solid var(--gc-rule-strong);
 	border-radius: 0;
