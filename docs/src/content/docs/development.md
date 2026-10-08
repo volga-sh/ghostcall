@@ -70,6 +70,7 @@ for queries (`// ^?`) and hidden code (`// ---cut---`).
 
 Reference signatures and type definitions use queries on SDK imports, so they
 follow the source without maintaining separate declarations or drift checks.
+Usage examples show types on hover only; do not add queries to them.
 
 The docs pin TypeScript 5.9 because twoslash needs the compiler API that
 TypeScript 7 does not ship, and override expressive-code-twoslash's peer range

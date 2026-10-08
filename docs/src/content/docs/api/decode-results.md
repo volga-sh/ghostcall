@@ -14,7 +14,6 @@ description: Parse the raw response returned by ghostcall.
 import { decodeResults } from "@volga-sh/evm-ghostcall";
 
 const results = decodeResults("0x8002cafe0004deadbeef");
-//    ^?
 // [
 //   { success: true, returnData: "0xcafe" },
 //   { success: false, returnData: "0xdeadbeef" },

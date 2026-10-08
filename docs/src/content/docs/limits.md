@@ -35,7 +35,6 @@ declare const calls: GhostcallCall[];
 // ---cut---
 const data = encodeCalls(calls, {
 	maxInitcodeBytes: 32_000,
-	// ^?
 });
 ```
 
