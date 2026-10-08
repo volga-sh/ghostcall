@@ -15,7 +15,6 @@ import { aggregateCalls } from "@volga-sh/evm-ghostcall";
 const weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 
 const results = await aggregateCalls(client, [
-//    ^?
 	// totalSupply()
 	{ to: weth, data: "0x18160ddd" },
 	// If this call reverts, it returns success: false instead of throwing.
@@ -54,7 +53,6 @@ const weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const [result] = await aggregateCalls(client, [{ to: weth, data: "0x18160ddd" }], {
 	ethCall: {
 		blockTag: 19_000_000n,
-		// ^?
 		from: "0x0000000000000000000000000000000000000000",
 		gas: 3_000_000n,
 	},

@@ -20,7 +20,6 @@ const token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const owner = "0x28C6c06298d514Db089934071355E5743bf21d60";
 
 const results = await aggregateDecodedCalls(client, [
-//    ^?
 	{ to: token, abi: erc20Abi, functionName: "totalSupply" },
 	{ to: token, abi: erc20Abi, functionName: "balanceOf", args: [owner] },
 	{ to: token, abi: erc20Abi, functionName: "decimals" },
@@ -69,13 +68,11 @@ const token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const customContract = "0x28C6c06298d514Db089934071355E5743bf21d60";
 // ---cut---
 const results = await aggregateDecodedCalls(client, [
-//    ^?
 	{ to: token, abi: erc20Abi, functionName: "totalSupply" },
 	{
 		to: customContract,
 		data: "0x12345678",
 		decodeResult: (returnData) => BigInt(returnData),
-		//             ^?
 	},
 ]);
 ```

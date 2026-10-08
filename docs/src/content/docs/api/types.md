@@ -51,7 +51,6 @@ const calls = [
 ] as const satisfies readonly GhostcallAbiCall<typeof abi>[];
 
 const results = await aggregateDecodedCalls(client, calls);
-//    ^?
 ```
 
 `aggregateDecodedCalls()` infers each tuple position, including argument-selected

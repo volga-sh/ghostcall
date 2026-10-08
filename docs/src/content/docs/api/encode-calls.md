@@ -14,7 +14,6 @@ application sends the RPC request itself.
 import { decodeResults, encodeCalls, type Hex } from "@volga-sh/evm-ghostcall";
 
 const data = encodeCalls([
-//    ^?
 	{
 		// WETH totalSupply()
 		to: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
@@ -39,7 +38,6 @@ const body = (await response.json()) as {
 if (!body.result) throw new Error(body.error?.message ?? "eth_call failed");
 
 const results = decodeResults(body.result);
-//    ^?
 ```
 
 ## Signature

@@ -43,8 +43,6 @@ const owner = "0x28C6c06298d514Db089934071355E5743bf21d60";
 const spender = "0xE592427A0AEce92De3Edee1F18E0157C05861564";
 
 const [balance, allowance] = await aggregateDecodedCalls(client, [
-//     ^?
-//              ^?
 	{ to: usdc, abi: erc20Abi, functionName: "balanceOf", args: [owner] },
 	{ to: usdc, abi: erc20Abi, functionName: "allowance", args: [owner, spender] },
 ]);
