@@ -59,6 +59,6 @@ for the byte layout.
 
 ## Throws
 
-- `TypeError` for an invalid address, hex value, or `maxInitcodeBytes`.
+- `TypeError` for an invalid address or hex value.
 - `RangeError` when one call contains more than `65,535` bytes of calldata, or
   the complete request exceeds `maxInitcodeBytes`.

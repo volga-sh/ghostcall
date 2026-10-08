@@ -118,11 +118,6 @@ function encodeCalls(
 	calls: readonly GhostcallCall[],
 	{ maxInitcodeBytes = defaultMaxInitcodeBytes }: GhostcallEncodeOptions = {},
 ): Hex {
-	if (!Number.isSafeInteger(maxInitcodeBytes) || maxInitcodeBytes < 0) {
-		throw new TypeError(
-			"options.maxInitcodeBytes must be a non-negative safe integer",
-		);
-	}
 	let encodedData: Hex = ghostcallInitcode;
 	let totalEncodedSize = bundledInitcodeSize;
 	const sizeError = `encoded ghostcall initcode exceeds the ${maxInitcodeBytes}-byte CREATE initcode limit`;
@@ -162,7 +157,7 @@ async function aggregateCalls(
 	let index = 0;
 	for (const result of results) {
 		const call = calls[index] as GhostcallCall;
-		if (!result.success && call.allowFailure !== true) {
+		if (!result.success && !call.allowFailure) {
 			throw new GhostcallSubcallError(index, call, result.returnData);
 		}
 		index += 1;
@@ -210,16 +205,14 @@ async function executeCalls(
 		ethCall.from = assertAddress(from, "options.ethCall.from");
 	}
 	if (gas !== undefined) {
-		ethCall.gas = toQuantity(gas, "options.ethCall.gas");
+		ethCall.gas = toQuantity(gas);
 	}
 
 	const response = await provider.request({
 		method: "eth_call",
 		params: [
 			ethCall,
-			typeof blockTag === "bigint"
-				? toQuantity(blockTag, "options.ethCall.blockTag")
-				: blockTag,
+			typeof blockTag === "bigint" ? toQuantity(blockTag) : blockTag,
 		],
 	});
 	const results = decodeValidatedResults(
@@ -259,8 +252,9 @@ function decodeValidatedResults(data: Hex): GhostcallResult[] {
 	return results;
 }
 
-function assertAddress(value: unknown, label: string): Hex {
-	if (typeof value !== "string" || !isAddress(value, { strict: false })) {
+// Types cannot express a 20-byte length, and the Yul program trusts the payload.
+function assertAddress(value: string, label: string): Hex {
+	if (!isAddress(value, { strict: false })) {
 		throw new TypeError(`${label} must be a 20-byte hex string`);
 	}
 	return value;
@@ -276,9 +270,7 @@ function assertHex(value: unknown, label: string): Hex {
 	return value;
 }
 
-// The type proves a bigint and named tags; only the sign needs a runtime check.
-function toQuantity(value: bigint, label: string): Hex {
-	if (value < 0n) throw new TypeError(`${label} must be non-negative`);
+function toQuantity(value: bigint): Hex {
 	return `0x${value.toString(16)}`;
 }
 

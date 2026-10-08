@@ -6,7 +6,6 @@ import {
 	aggregateDecodedCalls,
 	decodeResults,
 	encodeCalls,
-	type GhostcallAggregateOptions,
 	type GhostcallCall,
 	type GhostcallDecodedCall,
 	type GhostcallProvider,
@@ -65,24 +64,18 @@ test("enforces calldata and full CREATE request ceilings at their boundaries", (
 		() => encodeCalls([], { maxInitcodeBytes: baseSize - 1 }),
 		RangeError,
 	);
-	for (const maxInitcodeBytes of [-1, 1.5, NaN, Infinity]) {
-		assert.throws(() => encodeCalls([], { maxInitcodeBytes }), TypeError);
-	}
 });
 
-test("rejects malformed caller hex and addresses", () => {
-	const invalid: unknown[] = [
+test("rejects addresses and calldata that the Hex type admits but the wire format does not", () => {
+	const invalid: GhostcallCall[] = [
 		{ ...call, to: "0x1234" },
 		{ ...call, to: `0xzz${"11".repeat(19)}` },
-		{ ...call, to: 123 },
-		...["1234", "0xabc", "0xzz", "0x00\n", 123].map((data) => ({
-			...call,
-			data,
-		})),
+		{ ...call, data: "0xabc" },
+		{ ...call, data: "0xzz" },
+		{ ...call, data: "0x00\n" },
 	];
-	// Exercise the untyped boundary; valid fixtures are checked with satisfies.
 	for (const input of invalid)
-		assert.throws(() => encodeCalls([input as GhostcallCall]), TypeError);
+		assert.throws(() => encodeCalls([input]), TypeError);
 });
 
 test("decodes mixed-case headers across uint15 length boundaries and rejects malformed responses", () => {
@@ -180,7 +173,7 @@ test("rejects non-hex provider responses and mismatched result counts", async ()
 	}
 });
 
-test("normalizes block references and rejects invalid outer options before RPC", async (t) => {
+test("normalizes block references and rejects a short sender address before RPC", async (t) => {
 	const request = t.mock.fn<GhostcallProvider["request"]>(async () => "0x");
 	for (const [blockTag, expected] of [
 		[0n, "0x0"],
@@ -194,16 +187,9 @@ test("normalizes block references and rejects invalid outer options before RPC",
 		]);
 	}
 	request.mock.resetCalls();
-	const invalid: NonNullable<GhostcallAggregateOptions["ethCall"]>[] = [
-		{ from: "0x1234" },
-		{ gas: -1n },
-		{ blockTag: -1n },
-	];
-	for (const ethCall of invalid) {
-		await assert.rejects(
-			aggregateCalls({ request }, [call], { ethCall }),
-			TypeError,
-		);
-	}
+	await assert.rejects(
+		aggregateCalls({ request }, [call], { ethCall: { from: "0x1234" } }),
+		/options\.ethCall\.from must be a 20-byte hex string/,
+	);
 	assert.equal(request.mock.callCount(), 0);
 });

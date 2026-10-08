@@ -80,7 +80,7 @@ calls in the batch.
 ## Errors
 
 - ABI resolution and encoding errors occur before RPC. ox errors pass through.
-- Invalid addresses, calldata, options, or provider responses throw `TypeError`.
+- Invalid addresses, calldata, or provider responses throw `TypeError`.
 - Requests exceeding a protocol or configured size limit throw `RangeError`.
 - Failed calls throw [`GhostcallSubcallError`](/api/subcall-error/), including
   their raw revert data.

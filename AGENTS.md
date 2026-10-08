@@ -119,8 +119,8 @@ Tests in this repository are real execution tests, not abstract unit exercises.
 - Exported functions should have explicit return types.
 - Define and export shared primitive types such as `Hex` in the SDK; examples and tests should import them from ghostcall.
 - Keep exports grouped at the end of hand-written TypeScript files instead of scattering `export` keywords through declarations. Generated files may follow their generator's output shape.
-- Use runtime validation at string and wire boundaries, where TypeScript cannot protect callers.
-- Do not add runtime checks for typed internal invariants that TypeScript already proves, such as required callbacks or disallowed fields within SDK-only control flow.
+- Do not validate at runtime anything the types already express, in public or internal APIs (for example that `gas` is a `bigint` or `blockTag` is a named tag). Callers who bypass the types get provider errors.
+- Add runtime checks only for constraints types cannot express that affect ghostcall's own bytes: address length, hex shape, size limits, and the untyped RPC response.
 - Avoid unnecessary assertions and wrappers; use them only when narrowing external input or bridging third-party type limitations.
 
 ### Generated Artifacts
@@ -137,7 +137,7 @@ The wire-format APIs accept and return raw `0x`-prefixed hex strings. The decode
 
 ### Validation Pattern
 
-Use runtime checks where data crosses an untyped boundary:
+Use runtime checks only where types cannot express the constraint:
 
 - hex shape and prefix validation
 - address length validation
@@ -146,7 +146,7 @@ Use runtime checks where data crosses an untyped boundary:
 
 The Yul program deliberately does not validate request payloads, which keeps the initcode small. The SDK is the request validation boundary: `encodeCalls()` must reject anything the program would misread, such as malformed hex, bad addresses, or oversized calldata.
 
-Do not add redundant runtime validation where TypeScript already proves the invariant and the missing check does not create a protocol or safety risk.
+Do not add runtime validation for anything the types already express.
 
 ### Error Handling Pattern
 

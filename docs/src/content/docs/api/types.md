@@ -37,7 +37,8 @@ type GhostcallAggregateOptions = GhostcallEncodeOptions & {
 ```
 
 Addresses must contain 20 bytes. Calldata and returndata must be even-length,
-`0x`-prefixed hex. The SDK validates these values at runtime. Block numbers and
+`0x`-prefixed hex. The SDK checks these at runtime because the types cannot
+express them; every other option is checked only by its type. Block numbers and
 `gas` are sent as RPC hex quantities.
 
 `GhostcallAbiCall<TAbi>` and `GhostcallDecodedCall<TResult>` are the two entry

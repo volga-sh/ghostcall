@@ -61,7 +61,7 @@ const [result] = await aggregateCalls(client, [{ to: weth, data: "0x18160ddd" }]
 
 ## Throws
 
-- `TypeError` for invalid addresses, hex data, options, or provider responses.
+- `TypeError` for invalid addresses, hex data, or provider responses.
 - `RangeError` when one call or the full request exceeds its size limit.
 - [`GhostcallSubcallError`](/api/subcall-error/) when a call fails without
   `allowFailure: true`.
