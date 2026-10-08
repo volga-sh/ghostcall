@@ -56,7 +56,6 @@ type BenchmarkReport = {
 				tokenCount: number;
 				ownerCount: number;
 				fullCreateDataBytes: number;
-				appendedPayloadBytes: number;
 				returnedBytes: number;
 				inputBytesPerCall: number;
 				returnedBytesPerCall: number;
@@ -390,8 +389,6 @@ async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
 						fullCreateDataBytes:
 							ghostcallInitcodeBytes +
 							balanceLimit.maxPass * balanceInputBytesPerCall,
-						appendedPayloadBytes:
-							balanceLimit.maxPass * balanceInputBytesPerCall,
 						returnedBytes: balanceLimit.maxPass * balanceReturnedBytesPerCall,
 						inputBytesPerCall: balanceInputBytesPerCall,
 						returnedBytesPerCall: balanceReturnedBytesPerCall,
@@ -454,7 +451,6 @@ function formatBenchmarkReport(report: BenchmarkReport): string {
 			`owner inputs: ${format(balances.ownerCount)}`,
 			formatLimit(balances, "calls"),
 			`full CREATE data: ${format(balances.fullCreateDataBytes)} bytes`,
-			`appended payload: ${format(balances.appendedPayloadBytes)} bytes`,
 			`returned bytes: ${format(balances.returnedBytes)} bytes`,
 			`per call input/return: ${balances.inputBytesPerCall}/${balances.returnedBytesPerCall} bytes`,
 		);
