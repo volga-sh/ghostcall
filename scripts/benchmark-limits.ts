@@ -193,14 +193,12 @@ function buildBalanceCalls(
 	});
 }
 
-/** Initcode of exactly `sizeBytes`: empty-runtime code plus unreachable zero padding. */
+/**
+ * Initcode of exactly `sizeBytes`: empty-runtime code plus unreachable zero
+ * padding. findLimit starts at the 5-byte prefix, so sizes are never smaller.
+ */
 function createRawInitcodeSizeProbe(sizeBytes: number): Hex {
 	const paddingBytes = sizeBytes - emptyRuntimeInitcode.length / 2;
-	if (!Number.isSafeInteger(paddingBytes) || paddingBytes < 0) {
-		throw new RangeError(
-			`sizeBytes must be an integer >= ${emptyRuntimeInitcode.length / 2}`,
-		);
-	}
 	return `0x${emptyRuntimeInitcode}${"00".repeat(paddingBytes)}`;
 }
 

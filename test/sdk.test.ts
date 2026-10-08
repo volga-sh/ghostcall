@@ -194,19 +194,14 @@ test("normalizes block references and rejects invalid outer options before RPC",
 		]);
 	}
 	request.mock.resetCalls();
-	const invalid: unknown[] = [
+	const invalid: NonNullable<GhostcallAggregateOptions["ethCall"]>[] = [
 		{ from: "0x1234" },
-		...[-1n, 21_000, "0x5208"].map((gas) => ({ gas })),
-		// Block hashes, numbers, and hex strings are not block references here.
-		...[-1n, 123, "123", "0x7b", `0x${"ab".repeat(32)}`, "", "Latest"].map(
-			(blockTag) => ({ blockTag }),
-		),
+		{ gas: -1n },
+		{ blockTag: -1n },
 	];
 	for (const ethCall of invalid) {
 		await assert.rejects(
-			aggregateCalls({ request }, [call], {
-				ethCall,
-			} as GhostcallAggregateOptions),
+			aggregateCalls({ request }, [call], { ethCall }),
 			TypeError,
 		);
 	}

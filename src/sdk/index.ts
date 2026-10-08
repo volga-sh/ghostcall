@@ -109,13 +109,6 @@ const returnDataLengthMask = 0x7fff;
 // EIP-3860 initcode limit.
 const defaultMaxInitcodeBytes = 0xc000;
 const bundledInitcodeSize = hexSize(ghostcallInitcode);
-const blockTagNames = new Set([
-	"latest",
-	"earliest",
-	"pending",
-	"safe",
-	"finalized",
-]);
 
 /**
  * Build CREATE-style eth_call data: initcode followed by [length (2)][target (20)][data].
@@ -222,7 +215,12 @@ async function executeCalls(
 
 	const response = await provider.request({
 		method: "eth_call",
-		params: [ethCall, normalizeBlockTag(blockTag)],
+		params: [
+			ethCall,
+			typeof blockTag === "bigint"
+				? toQuantity(blockTag, "options.ethCall.blockTag")
+				: blockTag,
+		],
 	});
 	const results = decodeValidatedResults(
 		assertHex(response, "eth_call result"),
@@ -278,20 +276,10 @@ function assertHex(value: unknown, label: string): Hex {
 	return value;
 }
 
-function toQuantity(value: unknown, label: string): Hex {
-	if (typeof value !== "bigint" || value < 0n) {
-		throw new TypeError(`${label} must be a non-negative bigint`);
-	}
+// The type proves a bigint and named tags; only the sign needs a runtime check.
+function toQuantity(value: bigint, label: string): Hex {
+	if (value < 0n) throw new TypeError(`${label} must be non-negative`);
 	return `0x${value.toString(16)}`;
-}
-
-function normalizeBlockTag(value: unknown): string {
-	if (typeof value === "string" && blockTagNames.has(value)) return value;
-	if (typeof value === "bigint" && value >= 0n)
-		return `0x${value.toString(16)}`;
-	throw new TypeError(
-		`options.ethCall.blockTag must be a non-negative bigint or one of: ${[...blockTagNames].join(", ")}`,
-	);
 }
 
 export type {
