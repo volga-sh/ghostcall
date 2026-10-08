@@ -1,3 +1,4 @@
+import { selectAll } from "expressive-code/hast";
 import ecTwoSlash from "expressive-code-twoslash";
 
 const plugin = ecTwoSlash({
@@ -26,21 +27,6 @@ const plugin = ecTwoSlash({
 // count failures and fail the build in `failOnTwoslashErrors`.
 let failedBlocks = 0;
 
-// Popups ship in the static HTML; keep their types and JSDoc out of search.
-const popups = new Set([
-	"twoslash-popup-container",
-	"twoslash-static-container",
-	"twoslash-completion-container",
-]);
-
-function excludePopupsFromSearch(node) {
-	if (node.properties?.className?.some((name) => popups.has(name))) {
-		node.properties.dataPagefindIgnore = "";
-	} else {
-		node.children?.forEach(excludePopupsFromSearch);
-	}
-}
-
 /** Type-checks `ts twoslash` code blocks and renders their editor hovers. */
 export const twoslash = {
 	...plugin,
@@ -54,7 +40,13 @@ export const twoslash = {
 			}
 		},
 		postprocessRenderedBlock({ renderData }) {
-			excludePopupsFromSearch(renderData.blockAst);
+			// Popups ship in the static HTML; keep their types and JSDoc out of search.
+			for (const node of selectAll(
+				".twoslash-popup-container, .twoslash-static-container, .twoslash-completion-container",
+				renderData.blockAst,
+			)) {
+				node.properties.dataPagefindIgnore = "";
+			}
 		},
 	},
 };

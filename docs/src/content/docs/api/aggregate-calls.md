@@ -28,17 +28,8 @@ for (const { success, returnData } of results) console.log(success, returnData);
 ## Signature
 
 ```ts twoslash
-import type { GhostcallAggregateOptions, GhostcallCall, GhostcallProvider, GhostcallResult } from "@volga-sh/evm-ghostcall";
-// ---cut---
-declare function aggregateCalls(
-	provider: GhostcallProvider,
-	calls: readonly GhostcallCall[],
-	options?: GhostcallAggregateOptions,
-): Promise<GhostcallResult[]>;
-// ---cut-after---
-import { aggregateCalls as sdk } from "@volga-sh/evm-ghostcall";
-sdk satisfies typeof aggregateCalls;
-aggregateCalls satisfies typeof sdk;
+import { aggregateCalls } from "@volga-sh/evm-ghostcall";
+//       ^?
 ```
 
 See [Types](/api/types/) for each type.

@@ -7,48 +7,31 @@ Import types from `@volga-sh/evm-ghostcall`. Function pages link here instead of
 repeating these definitions.
 
 ```ts twoslash
-type Hex = `0x${string}`;
-
-type GhostcallCall = {
-	to: Hex;
-	data: Hex;
-	// aggregateCalls() only: return this failure instead of throwing.
-	allowFailure?: boolean;
-};
-
-type GhostcallResult = { success: boolean; returnData: Hex };
-
-type GhostcallProvider = {
-	request(args: { method: string; params?: unknown }): Promise<unknown>;
-};
-
-type GhostcallEncodeOptions = {
-	maxInitcodeBytes?: number; // Default: 49,152, the full CREATE request.
-};
-
-type GhostcallAggregateOptions = GhostcallEncodeOptions & {
-	ethCall?: {
-		from?: Hex;
-		gas?: bigint;
-		// Default: "latest".
-		blockTag?: bigint | "latest" | "earliest" | "pending" | "safe" | "finalized";
-	};
-};
-// ---cut-after---
-import type * as Sdk from "@volga-sh/evm-ghostcall";
-type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-true satisfies Equal<Hex, Sdk.Hex>;
-true satisfies Equal<GhostcallCall, Sdk.GhostcallCall>;
-true satisfies Equal<GhostcallResult, Sdk.GhostcallResult>;
-true satisfies Equal<GhostcallProvider, Sdk.GhostcallProvider>;
-true satisfies Equal<GhostcallEncodeOptions, Sdk.GhostcallEncodeOptions>;
-true satisfies Equal<GhostcallAggregateOptions, Sdk.GhostcallAggregateOptions>;
+import type {
+	Hex,
+// ^?
+	GhostcallCall,
+// ^?
+	GhostcallResult,
+// ^?
+	GhostcallProvider,
+// ^?
+	GhostcallEncodeOptions,
+// ^?
+	GhostcallAggregateOptions,
+// ^?
+} from "@volga-sh/evm-ghostcall";
 ```
 
 Addresses must contain 20 bytes. Calldata and returndata must be even-length,
 `0x`-prefixed hex. The SDK checks these at runtime because the types cannot
 express them; every other option is checked only by its type. Block numbers and
 `gas` are sent as RPC hex quantities.
+
+`allowFailure` applies only to `aggregateCalls()`: set it to `true` to return a
+failed entry instead of throwing. It defaults to `false`.
+`maxInitcodeBytes` defaults to `49,152` bytes for the full CREATE request.
+`ethCall.blockTag` defaults to `"latest"`.
 
 `GhostcallAbiCall<TAbi>` and `GhostcallDecodedCall<TResult>` are the two entry
 forms accepted by [`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/): an

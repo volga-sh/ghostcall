@@ -68,6 +68,9 @@ editor hovers; a type error fails `docs:build`. Examples can use a global
 `client` provider. See the [twoslash syntax](https://twoslash.studiocms.dev/)
 for queries (`// ^?`) and hidden code (`// ---cut---`).
 
+Reference signatures and type definitions use queries on SDK imports, so they
+follow the source without maintaining separate declarations or drift checks.
+
 The docs pin TypeScript 5.9 because twoslash needs the compiler API that
 TypeScript 7 does not ship, and override expressive-code-twoslash's peer range
 to the expressive-code version Starlight installs. Update that override when

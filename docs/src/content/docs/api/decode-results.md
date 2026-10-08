@@ -24,13 +24,8 @@ const results = decodeResults("0x8002cafe0004deadbeef");
 ## Signature
 
 ```ts twoslash
-import type { GhostcallResult, Hex } from "@volga-sh/evm-ghostcall";
-// ---cut---
-declare function decodeResults(data: Hex): GhostcallResult[];
-// ---cut-after---
-import { decodeResults as sdk } from "@volga-sh/evm-ghostcall";
-sdk satisfies typeof decodeResults;
-decodeResults satisfies typeof sdk;
+import { decodeResults } from "@volga-sh/evm-ghostcall";
+//       ^?
 ```
 
 `decodeResults("0x")` returns `[]`. The function applies no failure policy,

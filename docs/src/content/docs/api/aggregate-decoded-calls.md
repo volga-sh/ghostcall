@@ -31,13 +31,12 @@ Function names and arguments are checked against the ABI, so editors suggest
 the ABI's function names:
 
 ```ts twoslash
-// @noErrors
 import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
 import { erc20Abi } from "viem";
 const token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 // ---cut---
 await aggregateDecodedCalls(client, [
-	{ to: token, abi: erc20Abi, functionName: "t" },
+	{ to: token, abi: erc20Abi, functionName: "totalSupply" },
 	//                                          ^|
 ]);
 ```
