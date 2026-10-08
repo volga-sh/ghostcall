@@ -15,7 +15,9 @@ ghostcall exports four functions, one error class, and their
 
 [`GhostcallSubcallError`](/api/subcall-error/) identifies which call failed.
 
-```ts
+Hover a name below to read its signature and description.
+
+```ts twoslash
 import {
 	aggregateCalls,
 	aggregateDecodedCalls,

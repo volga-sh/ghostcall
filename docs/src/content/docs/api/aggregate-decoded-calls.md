@@ -12,24 +12,42 @@ succeed; a failed call throws `GhostcallSubcallError`.
 Declare each ABI, function name, and argument list once. ghostcall uses ox to
 resolve that function, encode its arguments, and decode its result.
 
-```ts
+```ts twoslash
+import type { GhostcallProvider } from "@volga-sh/evm-ghostcall";
+declare const client: GhostcallProvider;
+// ---cut---
 import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
 import { erc20Abi } from "viem";
 
 const token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const owner = "0x28C6c06298d514Db089934071355E5743bf21d60";
 
-const [totalSupply, balance, decimals] = await aggregateDecodedCalls(client, [
+const results = await aggregateDecodedCalls(client, [
+//    ^?
 	{ to: token, abi: erc20Abi, functionName: "totalSupply" },
 	{ to: token, abi: erc20Abi, functionName: "balanceOf", args: [owner] },
 	{ to: token, abi: erc20Abi, functionName: "decimals" },
 ]);
-// totalSupply: bigint, balance: bigint, decimals: number
 ```
 
-Function names and arguments are checked against the ABI. `args` is required
-when the chosen function has inputs; zero-input functions may omit it or use
-`args: []`. No return-type annotations or casts are needed.
+Function names and arguments are checked against the ABI, so editors suggest
+the ABI's function names:
+
+```ts twoslash
+// @noErrors
+import { aggregateDecodedCalls, type GhostcallProvider } from "@volga-sh/evm-ghostcall";
+import { erc20Abi } from "viem";
+declare const client: GhostcallProvider;
+const token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+// ---cut---
+await aggregateDecodedCalls(client, [
+	{ to: token, abi: erc20Abi, functionName: "t" },
+	//                                          ^|
+]);
+```
+
+`args` is required when the chosen function has inputs; zero-input functions
+may omit it or use `args: []`. No return-type annotations or casts are needed.
 
 Use literal JSON ABIs with `as const`, viem's `parseAbi`, or ox's `Abi.from` to
 retain type inference. A broadly typed ABI loaded at runtime produces `unknown`
@@ -49,16 +67,23 @@ arrays.
 Already-encoded calldata remains supported. Supply `data` and `decodeResult`
 for those entries. Raw and ABI-described entries can share a batch:
 
-```ts
-const [totalSupply, customValue] = await aggregateDecodedCalls(client, [
+```ts twoslash
+import { aggregateDecodedCalls, type GhostcallProvider } from "@volga-sh/evm-ghostcall";
+import { erc20Abi } from "viem";
+declare const client: GhostcallProvider;
+const token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+const customContract = "0x28C6c06298d514Db089934071355E5743bf21d60";
+// ---cut---
+const results = await aggregateDecodedCalls(client, [
+//    ^?
 	{ to: token, abi: erc20Abi, functionName: "totalSupply" },
 	{
 		to: customContract,
 		data: "0x12345678",
 		decodeResult: (returnData) => BigInt(returnData),
+		//             ^?
 	},
 ]);
-// [bigint, bigint]
 ```
 
 A custom decoder receives `(returnData, index)`: the successful call's return

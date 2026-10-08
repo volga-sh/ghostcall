@@ -6,7 +6,7 @@ description: The public TypeScript types exported by ghostcall.
 Import types from `@volga-sh/evm-ghostcall`. Function pages link here instead of
 repeating these definitions.
 
-```ts
+```ts twoslash
 type Hex = `0x${string}`;
 
 type GhostcallCall = {
@@ -34,6 +34,21 @@ type GhostcallAggregateOptions = GhostcallEncodeOptions & {
 		blockTag?: bigint | "latest" | "earliest" | "pending" | "safe" | "finalized";
 	};
 };
+// ---cut-after---
+// Fail the docs build if these definitions drift from the SDK's exports.
+import type * as Exported from "@volga-sh/evm-ghostcall";
+type Equal<A, B> =
+	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+		? true
+		: false;
+const matchesSdk: [
+	Equal<Hex, Exported.Hex>,
+	Equal<GhostcallCall, Exported.GhostcallCall>,
+	Equal<GhostcallResult, Exported.GhostcallResult>,
+	Equal<GhostcallProvider, Exported.GhostcallProvider>,
+	Equal<GhostcallEncodeOptions, Exported.GhostcallEncodeOptions>,
+	Equal<GhostcallAggregateOptions, Exported.GhostcallAggregateOptions>,
+] = [true, true, true, true, true, true];
 ```
 
 Addresses must contain 20 bytes. Calldata and returndata must be even-length,
@@ -47,8 +62,14 @@ ABI function call, or raw calldata with a custom decoder returning `TResult`.
 
 ## Declaring reusable calls
 
-```ts
-import type { GhostcallAbiCall } from "@volga-sh/evm-ghostcall";
+```ts twoslash
+import type { GhostcallProvider } from "@volga-sh/evm-ghostcall";
+declare const client: GhostcallProvider;
+// ---cut---
+import {
+	aggregateDecodedCalls,
+	type GhostcallAbiCall,
+} from "@volga-sh/evm-ghostcall";
 import { Abi } from "ox";
 
 const abi = Abi.from(["function balanceOf(address owner) view returns (uint256)"]);
@@ -57,6 +78,9 @@ const owner = "0x28C6c06298d514Db089934071355E5743bf21d60";
 const calls = [
 	{ to: token, abi, functionName: "balanceOf", args: [owner] },
 ] as const satisfies readonly GhostcallAbiCall<typeof abi>[];
+
+const results = await aggregateDecodedCalls(client, calls);
+//    ^?
 ```
 
 `aggregateDecodedCalls()` infers each tuple position, including argument-selected

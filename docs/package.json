@@ -3,16 +3,26 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"build": "astro build",
-		"dev": "astro dev",
+		"build": "astro build --force",
+		"dev": "astro dev --force",
 		"preview": "astro preview"
 	},
 	"devDependencies": {
 		"@astrojs/starlight": "0.42.4",
-		"astro": "7.3.5"
+		"astro": "7.3.5",
+		"expressive-code-twoslash": "0.6.1",
+		"ox": "1.8.6",
+		"typescript": "5.9.3",
+		"viem": "2.57.4"
 	},
 	"allowScripts": {
 		"esbuild@0.28.2": true,
 		"fsevents": false
+	},
+	"overrides": {
+		"expressive-code-twoslash": {
+			"@expressive-code/core": "0.44.2",
+			"expressive-code": "0.44.2"
+		}
 	}
 }

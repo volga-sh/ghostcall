@@ -10,10 +10,11 @@ application sends the RPC request itself.
 
 ## Usage
 
-```ts
+```ts twoslash
 import { decodeResults, encodeCalls, type Hex } from "@volga-sh/evm-ghostcall";
 
 const data = encodeCalls([
+//    ^?
 	{
 		// WETH totalSupply()
 		to: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
@@ -38,15 +39,27 @@ const body = (await response.json()) as {
 if (!body.result) throw new Error(body.error?.message ?? "eth_call failed");
 
 const results = decodeResults(body.result);
+//    ^?
 ```
 
 ## Signature
 
-```ts
-function encodeCalls(
+```ts twoslash
+import type {
+	GhostcallCall,
+	GhostcallEncodeOptions,
+	Hex,
+} from "@volga-sh/evm-ghostcall";
+// ---cut---
+declare function encodeCalls(
 	calls: readonly GhostcallCall[],
 	options?: GhostcallEncodeOptions,
 ): Hex;
+// ---cut-after---
+// Fail the docs build if this signature drifts from the SDK.
+import { encodeCalls as exported } from "@volga-sh/evm-ghostcall";
+exported satisfies typeof encodeCalls;
+encodeCalls satisfies typeof exported;
 ```
 
 See [Types](/api/types/) for each type and [Protocol](/protocol/#request-bytes)

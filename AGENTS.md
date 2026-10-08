@@ -110,6 +110,7 @@ Tests in this repository are real execution tests, not abstract unit exercises.
 - Public SDK functions should have accurate JSDoc.
 - Examples should be runnable, concise, and focused on `ghostcall`, not on provider boilerplate.
 - Docs examples should reflect actual tested behavior.
+- Write TypeScript docs examples as `ts twoslash` blocks. `npm run docs:build` type-checks them against `src/sdk` and fails on drift, so run it after changing public types or signatures.
 - Internal helpers with non-obvious invariants should have short comments or docstrings.
 
 ### TypeScript Conventions

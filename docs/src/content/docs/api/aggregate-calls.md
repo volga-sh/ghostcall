@@ -9,12 +9,16 @@ flags or revert data are needed, or when selected calls may fail.
 
 ## Usage
 
-```ts
+```ts twoslash
+import type { GhostcallProvider } from "@volga-sh/evm-ghostcall";
+declare const client: GhostcallProvider;
+// ---cut---
 import { aggregateCalls } from "@volga-sh/evm-ghostcall";
 
 const weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 
 const results = await aggregateCalls(client, [
+//    ^?
 	// totalSupply()
 	{ to: weth, data: "0x18160ddd" },
 	// If this call reverts, it returns success: false instead of throwing.
@@ -26,12 +30,24 @@ for (const { success, returnData } of results) console.log(success, returnData);
 
 ## Signature
 
-```ts
-async function aggregateCalls(
+```ts twoslash
+import type {
+	GhostcallAggregateOptions,
+	GhostcallCall,
+	GhostcallProvider,
+	GhostcallResult,
+} from "@volga-sh/evm-ghostcall";
+// ---cut---
+declare function aggregateCalls(
 	provider: GhostcallProvider,
 	calls: readonly GhostcallCall[],
 	options?: GhostcallAggregateOptions,
 ): Promise<GhostcallResult[]>;
+// ---cut-after---
+// Fail the docs build if this signature drifts from the SDK.
+import { aggregateCalls as exported } from "@volga-sh/evm-ghostcall";
+exported satisfies typeof aggregateCalls;
+aggregateCalls satisfies typeof exported;
 ```
 
 See [Types](/api/types/) for each type.
@@ -49,10 +65,15 @@ See [Types](/api/types/) for each type.
 a named tag and defaults to `"latest"`. Omitted `from` and `gas` use provider
 defaults.
 
-```ts
+```ts twoslash
+import { aggregateCalls, type GhostcallProvider } from "@volga-sh/evm-ghostcall";
+declare const client: GhostcallProvider;
+const weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+// ---cut---
 const [result] = await aggregateCalls(client, [{ to: weth, data: "0x18160ddd" }], {
 	ethCall: {
 		blockTag: 19_000_000n,
+		// ^?
 		from: "0x0000000000000000000000000000000000000000",
 		gas: 3_000_000n,
 	},

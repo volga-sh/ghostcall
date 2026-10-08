@@ -1,5 +1,6 @@
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
+import { failOnTwoslashErrors, twoslash } from "./twoslash.mjs";
 
 const site = "https://ghostcall.volga.sh";
 const socialImage = new URL("/og.png", site).href;
@@ -27,7 +28,26 @@ export default defineConfig({
 						inlineButtonForeground: "var(--gc-code-ink)",
 						frameBoxShadowCssValue: "none",
 					},
+					twoSlash: {
+						background: "var(--gc-surface)",
+						borderColor: "var(--gc-rule-strong)",
+						textColor: "var(--gc-code-ink)",
+						hoverUnderlineColor: "var(--gc-rule-strong)",
+						tagColor: "var(--gc-accent-deep)",
+						linkColor: "var(--gc-accent)",
+						linkColorHover: "var(--gc-accent-deep)",
+						linkColorVisited: "var(--gc-accent)",
+						linkColorActive: "var(--gc-accent-deep)",
+						cursorColor: "var(--gc-accent)",
+						completionBoxBackground: "var(--gc-surface)",
+						completionBoxBorder: "var(--gc-rule-strong)",
+						completionBoxColor: "var(--gc-code-ink)",
+						completionBoxMatchedColor: "var(--gc-accent)",
+						completionBoxHoverBackground: "var(--gc-accent-soft)",
+						completionIconString: "var(--gc-muted)",
+					},
 				},
+				plugins: [twoslash],
 			},
 			head: [
 				{
@@ -129,5 +149,6 @@ export default defineConfig({
 				},
 			],
 		}),
+		failOnTwoslashErrors,
 	],
 });

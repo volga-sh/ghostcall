@@ -191,6 +191,36 @@ site-search dialog {
 	scrollbar-color: #aab2bb var(--gc-code);
 }
 
+/* Twoslash renders popup types as nested code blocks; only the outer block
+   gets a frame. Inside a titled block, the title-bar rules also reach the
+   nested block's empty header, so this selector must outrank them. Popups
+   keep the site's square corners, and JSDoc text reads as prose whether it
+   appears on hover or below a `^?` query. */
+.twoslash-popup-code .expressive-code figure.frame {
+	border: 0;
+}
+
+.twoslash-popup-code
+	.twoslash-popup-code-type
+	.expressive-code
+	.frame
+	figcaption.header {
+	display: none;
+}
+
+.expressive-code
+	:is(
+		.twoslash-popup-container,
+		.twoslash-static-container,
+		.twoslash-completion-container
+	) {
+	border-radius: 0;
+}
+
+.expressive-code .twoslash-popup-docs {
+	font-family: var(--gc-font-serif);
+}
+
 .expressive-code .copy button {
 	border: 1px solid var(--gc-rule-strong);
 	border-radius: 0;
