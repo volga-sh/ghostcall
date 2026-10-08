@@ -45,21 +45,16 @@ const results = decodeResults(body.result);
 ## Signature
 
 ```ts twoslash
-import type {
-	GhostcallCall,
-	GhostcallEncodeOptions,
-	Hex,
-} from "@volga-sh/evm-ghostcall";
+import type { GhostcallCall, GhostcallEncodeOptions, Hex } from "@volga-sh/evm-ghostcall";
 // ---cut---
 declare function encodeCalls(
 	calls: readonly GhostcallCall[],
 	options?: GhostcallEncodeOptions,
 ): Hex;
 // ---cut-after---
-// Fail the docs build if this signature drifts from the SDK.
-import { encodeCalls as exported } from "@volga-sh/evm-ghostcall";
-exported satisfies typeof encodeCalls;
-encodeCalls satisfies typeof exported;
+import { encodeCalls as sdk } from "@volga-sh/evm-ghostcall";
+sdk satisfies typeof encodeCalls;
+encodeCalls satisfies typeof sdk;
 ```
 
 See [Types](/api/types/) for each type and [Protocol](/protocol/#request-bytes)

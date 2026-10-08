@@ -7,9 +7,6 @@ description: Inspect a contract call that caused a batch to throw.
 `aggregateCalls()` throws it unless that entry sets `allowFailure: true`.
 
 ```ts twoslash
-import type { GhostcallProvider } from "@volga-sh/evm-ghostcall";
-declare const client: GhostcallProvider;
-// ---cut---
 import { aggregateCalls, GhostcallSubcallError } from "@volga-sh/evm-ghostcall";
 
 try {

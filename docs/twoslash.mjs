@@ -1,54 +1,48 @@
-import { fileURLToPath } from "node:url";
 import ecTwoSlash from "expressive-code-twoslash";
-
-const resolvePath = (relativePath) =>
-	fileURLToPath(new URL(relativePath, import.meta.url));
 
 const plugin = ecTwoSlash({
 	twoslashOptions: {
-		// expressive-code-twoslash 0.6.1 creates a new twoslasher for every code
-		// block. Sharing one environment cache keeps it from building and holding
-		// a separate TypeScript program per block, about 100 MB each.
+		// 0.6.1 creates a twoslasher per code block; a shared cache keeps each
+		// block from building its own ~100 MB TypeScript environment.
 		cache: new Map(),
+		// Every example receives a provider without declaring one.
+		extraFiles: {
+			"client.d.ts":
+				"declare const client: import('@volga-sh/evm-ghostcall').GhostcallProvider;",
+		},
 		compilerOptions: {
-			// The SDK imports its own modules with `.ts` extensions.
-			allowImportingTsExtensions: true,
-			noEmit: true,
+			// Paths resolve from docs/. Check examples against the SDK source,
+			// and resolve its ox imports here because the docs build does not
+			// install the root node_modules.
 			paths: {
-				// Check examples against the SDK source, not the last release.
-				"@volga-sh/evm-ghostcall": [resolvePath("../src/sdk/index.ts")],
-				// The SDK source would otherwise resolve ox from the root
-				// node_modules, which the docs build does not install.
-				ox: [resolvePath("node_modules/ox")],
-				"ox/*": [resolvePath("node_modules/ox/dist/core/*.d.ts")],
+				"@volga-sh/evm-ghostcall": ["../src/sdk/index.ts"],
+				"ox/*": ["node_modules/ox/dist/core/*.d.ts"],
 			},
 		},
 	},
 });
 
-// Astro logs a Markdown page whose code block throws, then builds that page
-// empty, so a type error in an example would not fail `astro build` by itself.
+// Astro logs a Markdown page whose code block throws and builds it empty, so
+// count failures and fail the build in `failOnTwoslashErrors`.
 let failedBlocks = 0;
 
-// Popups ship in the static HTML. Without this, Pagefind indexes every type
-// signature and JSDoc comment as page text.
-const popupClassNames = [
+// Popups ship in the static HTML; keep their types and JSDoc out of search.
+const popups = new Set([
 	"twoslash-popup-container",
-	"twoslash-static",
+	"twoslash-static-container",
 	"twoslash-completion-container",
-];
+]);
 
 function excludePopupsFromSearch(node) {
-	const classNames = node.properties?.className;
-	if (classNames?.some((name) => popupClassNames.includes(name))) {
+	if (node.properties?.className?.some((name) => popups.has(name))) {
 		node.properties.dataPagefindIgnore = "";
-		return;
+	} else {
+		node.children?.forEach(excludePopupsFromSearch);
 	}
-	for (const child of node.children ?? []) excludePopupsFromSearch(child);
 }
 
 /** Type-checks `ts twoslash` code blocks and renders their editor hovers. */
-const twoslash = {
+export const twoslash = {
 	...plugin,
 	hooks: {
 		async preprocessCode(context) {
@@ -65,18 +59,13 @@ const twoslash = {
 	},
 };
 
-/** Fails `astro build` after rendering if any `ts twoslash` block failed. */
-const failOnTwoslashErrors = {
+export const failOnTwoslashErrors = {
 	name: "fail-on-twoslash-errors",
 	hooks: {
 		"astro:build:done": () => {
 			if (failedBlocks > 0) {
-				throw new Error(
-					`${failedBlocks} twoslash code block(s) failed to render; see the errors above.`,
-				);
+				throw new Error(`${failedBlocks} twoslash code block(s) failed`);
 			}
 		},
 	},
 };
-
-export { failOnTwoslashErrors, twoslash };

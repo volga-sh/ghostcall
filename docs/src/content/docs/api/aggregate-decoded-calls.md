@@ -13,9 +13,6 @@ Declare each ABI, function name, and argument list once. ghostcall uses ox to
 resolve that function, encode its arguments, and decode its result.
 
 ```ts twoslash
-import type { GhostcallProvider } from "@volga-sh/evm-ghostcall";
-declare const client: GhostcallProvider;
-// ---cut---
 import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
 import { erc20Abi } from "viem";
 
@@ -35,9 +32,8 @@ the ABI's function names:
 
 ```ts twoslash
 // @noErrors
-import { aggregateDecodedCalls, type GhostcallProvider } from "@volga-sh/evm-ghostcall";
+import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
 import { erc20Abi } from "viem";
-declare const client: GhostcallProvider;
 const token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 // ---cut---
 await aggregateDecodedCalls(client, [
@@ -68,9 +64,8 @@ Already-encoded calldata remains supported. Supply `data` and `decodeResult`
 for those entries. Raw and ABI-described entries can share a batch:
 
 ```ts twoslash
-import { aggregateDecodedCalls, type GhostcallProvider } from "@volga-sh/evm-ghostcall";
+import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
 import { erc20Abi } from "viem";
-declare const client: GhostcallProvider;
 const token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const customContract = "0x28C6c06298d514Db089934071355E5743bf21d60";
 // ---cut---

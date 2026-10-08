@@ -31,11 +31,6 @@ Each entry declares its target, ABI, function name, and arguments once. The same
 function definition encodes the call and decodes its result.
 
 ```ts twoslash
-import { createPublicClient, http } from "viem";
-import { mainnet } from "viem/chains";
-
-const client = createPublicClient({ chain: mainnet, transport: http() });
-// ---cut---
 import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
 import { parseAbi } from "viem";
 

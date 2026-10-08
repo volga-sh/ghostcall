@@ -35,20 +35,14 @@ type GhostcallAggregateOptions = GhostcallEncodeOptions & {
 	};
 };
 // ---cut-after---
-// Fail the docs build if these definitions drift from the SDK's exports.
-import type * as Exported from "@volga-sh/evm-ghostcall";
-type Equal<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-		? true
-		: false;
-const matchesSdk: [
-	Equal<Hex, Exported.Hex>,
-	Equal<GhostcallCall, Exported.GhostcallCall>,
-	Equal<GhostcallResult, Exported.GhostcallResult>,
-	Equal<GhostcallProvider, Exported.GhostcallProvider>,
-	Equal<GhostcallEncodeOptions, Exported.GhostcallEncodeOptions>,
-	Equal<GhostcallAggregateOptions, Exported.GhostcallAggregateOptions>,
-] = [true, true, true, true, true, true];
+import type * as Sdk from "@volga-sh/evm-ghostcall";
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+true satisfies Equal<Hex, Sdk.Hex>;
+true satisfies Equal<GhostcallCall, Sdk.GhostcallCall>;
+true satisfies Equal<GhostcallResult, Sdk.GhostcallResult>;
+true satisfies Equal<GhostcallProvider, Sdk.GhostcallProvider>;
+true satisfies Equal<GhostcallEncodeOptions, Sdk.GhostcallEncodeOptions>;
+true satisfies Equal<GhostcallAggregateOptions, Sdk.GhostcallAggregateOptions>;
 ```
 
 Addresses must contain 20 bytes. Calldata and returndata must be even-length,
@@ -63,13 +57,7 @@ ABI function call, or raw calldata with a custom decoder returning `TResult`.
 ## Declaring reusable calls
 
 ```ts twoslash
-import type { GhostcallProvider } from "@volga-sh/evm-ghostcall";
-declare const client: GhostcallProvider;
-// ---cut---
-import {
-	aggregateDecodedCalls,
-	type GhostcallAbiCall,
-} from "@volga-sh/evm-ghostcall";
+import { aggregateDecodedCalls, type GhostcallAbiCall } from "@volga-sh/evm-ghostcall";
 import { Abi } from "ox";
 
 const abi = Abi.from(["function balanceOf(address owner) view returns (uint256)"]);

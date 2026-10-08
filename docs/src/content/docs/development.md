@@ -63,26 +63,15 @@ npm run docs:preview
 Documentation source files live in `docs/src`. The static build is written to
 `docs/dist`.
 
-Code blocks marked `ts twoslash` are type-checked against the SDK source in
-`src/sdk`, not the published package, and render editor hovers. A type error in
-an example fails `docs:build`, so an example cannot silently drift from the
-API. Twoslash notation is stripped from the rendered page:
+Code blocks marked `ts twoslash` are type-checked against `src/sdk` and render
+editor hovers; a type error fails `docs:build`. Examples can use a global
+`client` provider. See the [twoslash syntax](https://twoslash.studiocms.dev/)
+for queries (`// ^?`) and hidden code (`// ---cut---`).
 
-- `// ^?` below an identifier shows its inferred type.
-- `// ^|` shows editor completions; such blocks also need `// @noErrors`.
-- Code above `// ---cut---` or below `// ---cut-after---` is checked but not
-  shown. Signature and type blocks use the hidden part to assert that they
-  match the SDK's exports.
-
-See the [twoslash syntax reference](https://twoslash.studiocms.dev/) for the
-rest. The docs scripts pass `--force` to Astro so cached pages never show
-types from an earlier SDK.
-
-The docs pin TypeScript 5.9 separately from the repository's TypeScript 7
-because twoslash needs the JavaScript compiler API, which TypeScript 7 does not
-ship. `expressive-code-twoslash` declares an older expressive-code peer range;
-`docs/package.json` overrides it to the version Starlight installs, so update
-that override when upgrading Starlight.
+The docs pin TypeScript 5.9 because twoslash needs the compiler API that
+TypeScript 7 does not ship, and override expressive-code-twoslash's peer range
+to the expressive-code version Starlight installs. Update that override when
+upgrading Starlight.
 
 npm 12 blocks dependency install scripts by default. `docs/package.json` allows
 the pinned esbuild binary setup script; fsevents uses its bundled macOS binary

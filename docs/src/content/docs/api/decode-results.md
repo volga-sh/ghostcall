@@ -28,10 +28,9 @@ import type { GhostcallResult, Hex } from "@volga-sh/evm-ghostcall";
 // ---cut---
 declare function decodeResults(data: Hex): GhostcallResult[];
 // ---cut-after---
-// Fail the docs build if this signature drifts from the SDK.
-import { decodeResults as exported } from "@volga-sh/evm-ghostcall";
-exported satisfies typeof decodeResults;
-decodeResults satisfies typeof exported;
+import { decodeResults as sdk } from "@volga-sh/evm-ghostcall";
+sdk satisfies typeof decodeResults;
+decodeResults satisfies typeof sdk;
 ```
 
 `decodeResults("0x")` returns `[]`. The function applies no failure policy,
