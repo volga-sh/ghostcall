@@ -123,7 +123,9 @@ function encodeCalls(
 	const sizeError = `encoded ghostcall initcode exceeds the ${maxInitcodeBytes}-byte CREATE initcode limit`;
 	if (totalEncodedSize > maxInitcodeBytes) throw new RangeError(sizeError);
 
-	calls.forEach((call, index) => {
+	// A plain loop keeps the string concatenation fast; see benchmark:sdk.
+	let index = 0;
+	for (const call of calls) {
 		const to = assertAddress(call.to, `calls[${index}].to`);
 		const calldata = assertHex(call.data, `calls[${index}].data`);
 		const calldataSize = hexSize(calldata);
@@ -138,7 +140,8 @@ function encodeCalls(
 			.toString(16)
 			.padStart(calldataLengthHexChars, "0");
 		encodedData = `${encodedData}${header}${to.slice(2)}${calldata.slice(2)}`;
-	});
+		index += 1;
+	}
 	return encodedData;
 }
 
@@ -152,12 +155,14 @@ async function aggregateCalls(
 	options?: GhostcallAggregateOptions,
 ): Promise<GhostcallResult[]> {
 	const results = await executeCalls(provider, calls, options);
-	results.forEach(({ success, returnData }, index) => {
+	let index = 0;
+	for (const { success, returnData } of results) {
 		const call = calls[index] as GhostcallCall;
 		if (!success && !call.allowFailure) {
 			throw new GhostcallSubcallError(index, call, returnData);
 		}
-	});
+		index += 1;
+	}
 	return results;
 }
 
@@ -228,15 +233,16 @@ function decodeValidatedResults(data: Hex): GhostcallResult[] {
 		const header = Number.parseInt(data.slice(cursor, start), 16);
 		cursor = start + (header & returnDataLengthMask) * 2;
 		// A partial header also ends past the data, so one check covers both cases.
-		if (cursor > data.length)
+		if (cursor > data.length) {
 			throw new TypeError("Truncated ghostcall response");
+		}
 		const success = (header & successFlag) !== 0;
 		results.push({ success, returnData: `0x${data.slice(start, cursor)}` });
 	}
 	return results;
 }
 
-// Types cannot express a 20-byte length, and the Yul program trusts the payload.
+// Types cannot express a 20-byte length; call targets reach the Yul program unchecked.
 function assertAddress(value: string, label: string): Hex {
 	if (!isAddress(value, { strict: false })) {
 		throw new TypeError(`${label} must be a 20-byte hex string`);

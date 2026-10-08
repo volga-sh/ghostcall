@@ -62,10 +62,8 @@ type GhostcallAbiResult<TCall extends GhostcallAbiCall> =
 		Extract<ResolvedFunction<TCall>, AbiFunction.AbiFunction>
 	>;
 
-/**
- * Functions resolved within one batch, keyed by ABI object and function name.
- * `null` marks a name that must be resolved per call from its arguments.
- */
+// Functions resolved within one batch, keyed by ABI object and function name.
+// `null` marks a name that must be resolved per call from its arguments.
 type FunctionsByName = Map<string, AbiFunction.AbiFunction | null>;
 type SharedFunctions = Map<Abi, FunctionsByName>;
 
