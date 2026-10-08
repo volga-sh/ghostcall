@@ -6,6 +6,10 @@ const resolvePath = (relativePath) =>
 
 const plugin = ecTwoSlash({
 	twoslashOptions: {
+		// expressive-code-twoslash 0.6.1 creates a new twoslasher for every code
+		// block. Sharing one environment cache keeps it from building and holding
+		// a separate TypeScript program per block, about 100 MB each.
+		cache: new Map(),
 		compilerOptions: {
 			// The SDK imports its own modules with `.ts` extensions.
 			allowImportingTsExtensions: true,
