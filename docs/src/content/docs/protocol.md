@@ -57,8 +57,10 @@ There is no call count. The program reads entries until it reaches the end of
 the request data.
 
 `encodeCalls()` checks addresses, hex strings, calldata lengths, and the full
-request size. Manually built bytes must follow the same layout. Results from
-malformed hand-built requests are not defined.
+request size. The program itself does not validate the request bytes, which
+keeps it small: a truncated entry is padded with zero bytes and still executed,
+and stray trailing bytes become an extra call. Manually built bytes must follow
+the same layout; results from malformed requests are not defined.
 
 ## Response bytes
 

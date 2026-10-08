@@ -62,66 +62,62 @@ type GhostcallAbiResult<TCall extends GhostcallAbiCall> =
 		Extract<ResolvedFunction<TCall>, AbiFunction.AbiFunction>
 	>;
 
+// Functions resolved within one batch, keyed by ABI object and function name.
+// `null` marks a name that must be resolved per call from its arguments.
+type FunctionsByName = Map<string, AbiFunction.AbiFunction | null>;
+type SharedFunctions = Map<Abi, FunctionsByName>;
+
 /**
- * Functions resolved within one batch, keyed by ABI object and function name.
- * `null` marks a name that must be resolved per call from its arguments.
+ * Turn ABI calls into raw decoded calls that encode and decode with the same
+ * resolved function. Raw decoded calls pass through unchanged.
  */
-type ResolvedAbiFunctions = Map<
-	Abi,
-	Map<string, AbiFunction.AbiFunction | null>
->;
-
-/** Bind encoding and decoding to the same resolved ABI function. */
-function prepareAbiCall(
-	call: GhostcallAbiCall,
-	resolvedFunctions: ResolvedAbiFunctions,
-): GhostcallDecodedCall {
-	const args = call.args ?? [];
-	const abiFunction = resolveAbiFunction(call, args, resolvedFunctions);
-
-	// ox permits selector-only encoding with no args. At this wire boundary,
-	// missing arguments must fail before RPC, including for dynamically loaded ABIs.
-	if (args.length !== abiFunction.inputs.length) {
-		throw new TypeError(
-			`${call.functionName} expects ${abiFunction.inputs.length} arguments, received ${args.length}`,
-		);
-	}
-
-	return {
-		to: call.to,
-		data: AbiFunction.encodeData(abiFunction, args),
-		decodeResult: (returnData) =>
-			AbiFunction.decodeResult(abiFunction, returnData),
-	};
+function prepareDecodedCalls(
+	calls: readonly (GhostcallAbiCall | GhostcallDecodedCall)[],
+): GhostcallDecodedCall[] {
+	const sharedFunctions: SharedFunctions = new Map();
+	return calls.map((call): GhostcallDecodedCall => {
+		if (call.abi === undefined) return call;
+		const args = call.args ?? [];
+		const abiFunction = resolveAbiFunction(call, args, sharedFunctions);
+		// ox encodes only the selector when args are missing, so reject that
+		// before RPC; literal ABIs catch it in types, runtime-loaded ABIs cannot.
+		if (args.length !== abiFunction.inputs.length) {
+			throw new TypeError(
+				`${call.functionName} expects ${abiFunction.inputs.length} arguments, received ${args.length}`,
+			);
+		}
+		return {
+			to: call.to,
+			data: AbiFunction.encodeData(abiFunction, args),
+			decodeResult: (returnData) =>
+				AbiFunction.decodeResult(abiFunction, returnData),
+		};
+	});
 }
 
-// Each ox lookup hashes the function signature, so batches that repeat one
-// function resolve it once. ox ignores args when exactly one ABI item has the
-// name, of any item type. Other names resolve per call, by argument types.
+// Each ox lookup hashes the function signature, so a batch resolves each name
+// once when it can. ox ignores args when exactly one ABI item has the name, of
+// any item type. Other names resolve per call, by argument types.
 function resolveAbiFunction(
 	call: GhostcallAbiCall,
 	args: readonly unknown[],
-	resolvedFunctions: ResolvedAbiFunctions,
+	sharedFunctions: SharedFunctions,
 ): AbiFunction.AbiFunction {
-	let functions = resolvedFunctions.get(call.abi);
-	if (functions === undefined) {
-		functions = new Map();
-		resolvedFunctions.set(call.abi, functions);
-	}
-	const resolved = functions.get(call.functionName);
-	if (resolved) return resolved;
-
-	const abiFunction = AbiFunction.fromAbi(call.abi, call.functionName, {
-		args,
-	});
-	if (resolved === undefined) {
+	const functions: FunctionsByName = sharedFunctions.get(call.abi) ?? new Map();
+	sharedFunctions.set(call.abi, functions);
+	let shared = functions.get(call.functionName);
+	if (shared === undefined) {
 		const matches = call.abi.filter(
 			(item) => "name" in item && item.name === call.functionName,
 		);
-		functions.set(call.functionName, matches.length === 1 ? abiFunction : null);
+		shared =
+			matches.length === 1
+				? AbiFunction.fromAbi(call.abi, call.functionName)
+				: null;
+		functions.set(call.functionName, shared);
 	}
-	return abiFunction;
+	return shared ?? AbiFunction.fromAbi(call.abi, call.functionName, { args });
 }
 
-export type { GhostcallAbiCall, GhostcallAbiResult, ResolvedAbiFunctions };
-export { prepareAbiCall };
+export type { GhostcallAbiCall, GhostcallAbiResult };
+export { prepareDecodedCalls };

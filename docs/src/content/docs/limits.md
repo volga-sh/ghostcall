@@ -24,8 +24,7 @@ The request data contains the ghostcall program and every encoded call:
 Ethereum limits contract creation code to `49,152` bytes under EIP-3860. Other
 chains may use another limit, and RPC providers may reject smaller requests.
 
-The bundled ghostcall program is currently `91` bytes. SDK tests pin that size
-so changes are explicit.
+The bundled ghostcall program is currently `91` bytes.
 
 `encodeCalls()` uses `49,152` as its default limit. Pass `maxInitcodeBytes` to
 set a different ceiling:

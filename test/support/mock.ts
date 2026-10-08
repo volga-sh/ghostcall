@@ -19,25 +19,24 @@ async function setupMock(
 	to: Hex;
 	write(name: string, args?: readonly unknown[]): Promise<void>;
 }> {
-	const anvil = await startAnvil({
-		args:
-			codeSizeLimit === undefined
-				? []
-				: ["--code-size-limit", String(codeSizeLimit)],
-	});
-	t.after(() => stopAnvil(anvil));
+	const { child, transport } = await startAnvil(
+		codeSizeLimit === undefined
+			? []
+			: ["--code-size-limit", String(codeSizeLimit)],
+	);
+	t.after(() => stopAnvil(child));
 	const { abi, bytecode } = JSON.parse(
 		await readFile(
 			new URL("../../out/MockContract.sol/MockContract.json", import.meta.url),
 			"utf8",
 		),
 	) as { abi: Abi.Abi; bytecode: { object: Hex } };
-	const to = await deployContract(anvil.transport, bytecode.object);
+	const to = await deployContract(transport, bytecode.object);
 	return {
-		transport: anvil.transport,
+		transport,
 		to,
 		async write(name, args = []) {
-			await sendTransaction(anvil.transport, {
+			await sendTransaction(transport, {
 				to,
 				data: AbiFunction.encodeData(abi, name, args),
 			});

@@ -41,8 +41,8 @@ pass an ABI containing the specific overload you intend to call.
 
 One output becomes a scalar; multiple outputs form an ordered tuple. A function
 with no outputs returns `undefined`. These are ox's decoding conventions.
-Since 0.0.5, ghostcall returns checksummed ABI-decoded addresses, including
-addresses inside tuples and arrays. Earlier versions returned lowercase addresses.
+ABI-decoded addresses are checksummed, including addresses inside tuples and
+arrays.
 
 ## Raw calls with custom decoders
 
@@ -61,8 +61,8 @@ const [totalSupply, customValue] = await aggregateDecodedCalls(client, [
 // [bigint, bigint]
 ```
 
-A custom decoder receives `(returnData, entry, index)`, with a successful raw
-result entry and its zero-based position. Its return type determines that
+A custom decoder receives `(returnData, index)`: the successful call's return
+data and its zero-based position. Its return type determines that
 position's result type. Decoder errors pass through unchanged.
 
 Each entry uses either ABI fields or raw calldata with a decoder. TypeScript
@@ -72,20 +72,15 @@ optional failures.
 
 ## Provider and options
 
-The provider needs an EIP-1193-compatible `request` method. A viem public client,
-an ox transport, or a compatible custom provider works.
-
-See [`GhostcallAggregateOptions`](/api/types/#aggregate-options) for the shared options.
-
-`blockTag` defaults to `"latest"`. `maxInitcodeBytes` defaults to `49,152` bytes,
-including the initcode and all encoded call entries. Options apply to the whole
-batch. Execution still uses zero-value `CALL`; non-view functions may modify
-simulated state for later calls, as described in [Protocol](/protocol/).
+The provider and [options](/api/types/) match
+[`aggregateCalls()`](/api/aggregate-calls/#block-sender-and-gas). Subcalls use
+zero-value `CALL`, so non-view functions may change simulated state for later
+calls in the batch.
 
 ## Errors
 
 - ABI resolution and encoding errors occur before RPC. ox errors pass through.
-- Invalid addresses, calldata, options, or provider responses throw `TypeError`.
+- Invalid addresses, calldata, or provider responses throw `TypeError`.
 - Requests exceeding a protocol or configured size limit throw `RangeError`.
 - Failed calls throw [`GhostcallSubcallError`](/api/subcall-error/), including
   their raw revert data.

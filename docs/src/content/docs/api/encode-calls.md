@@ -3,15 +3,15 @@ title: encodeCalls
 description: Build the data for a ghostcall eth_call request.
 ---
 
-`encodeCalls()` combines the ghostcall program and a call list into one hex
-value. Send that value as the `data` field of `eth_call` without a `to` address.
-
-Use this function when the application sends the RPC request directly.
+`encodeCalls()` returns the ghostcall program followed by the encoded calls.
+Send it as the `data` of an `eth_call` without a `to` address, then parse the
+response with [`decodeResults()`](/api/decode-results/). Use this pair when the
+application sends the RPC request itself.
 
 ## Usage
 
 ```ts
-import { encodeCalls } from "@volga-sh/evm-ghostcall";
+import { decodeResults, encodeCalls, type Hex } from "@volga-sh/evm-ghostcall";
 
 const data = encodeCalls([
 	{
@@ -31,6 +31,13 @@ const response = await fetch("https://ethereum-rpc.publicnode.com", {
 		params: [{ data }, "latest"],
 	}),
 });
+const body = (await response.json()) as {
+	result?: Hex;
+	error?: { message?: string };
+};
+if (!body.result) throw new Error(body.error?.message ?? "eth_call failed");
+
+const results = decodeResults(body.result);
 ```
 
 ## Signature
@@ -42,61 +49,16 @@ function encodeCalls(
 ): Hex;
 ```
 
-## Parameters
+See [Types](/api/types/) for each type and [Protocol](/protocol/#request-bytes)
+for the byte layout.
 
-### calls
-
-```ts
-import type { Hex } from "@volga-sh/evm-ghostcall";
-
-type GhostcallCall = {
-	to: Hex;
-	data: Hex;
-	allowFailure?: boolean;
-};
-```
-
-An ordered list of contract addresses and calldata. Each `to` value must be a
-20-byte address. Each `data` value must be even-length hex with a `0x` prefix.
-
-`allowFailure` only affects `aggregateCalls()` and is ignored during encoding.
-
-One call is encoded as:
-
-```text
-2 bytes calldata length
-20 bytes target address
-N bytes calldata
-```
-
-### options
-
-```ts
-type GhostcallEncodeOptions = {
-	maxInitcodeBytes?: number;
-};
-```
-
-The maximum full request size in bytes. The default is `49,152`.
-
-## Returns
-
-```ts
-Hex
-```
-
-The complete request data:
-
-```text
-<ghostcall program><encoded calls>
-```
+- Each `to` must be a 20-byte address. Each `data` must be even-length,
+  `0x`-prefixed hex of at most `65,535` bytes. `allowFailure` is ignored.
+- `maxInitcodeBytes` caps the complete request and defaults to `49,152`.
+- An empty call list is valid and returns only the ghostcall program.
 
 ## Throws
 
-- `TypeError` for an invalid address, hex value, or `maxInitcodeBytes`.
-- `RangeError` when one call contains more than `65,535` bytes of calldata.
-- `RangeError` when the complete request exceeds `maxInitcodeBytes`.
-
-An empty call list is valid and returns only the ghostcall program.
-
-Pass the RPC response to [`decodeResults()`](/api/decode-results/).
+- `TypeError` for an invalid address or hex value.
+- `RangeError` when one call contains more than `65,535` bytes of calldata, or
+  the complete request exceeds `maxInitcodeBytes`.

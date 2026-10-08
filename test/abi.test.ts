@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Abi, AbiFunction } from "ox";
+import { size as hexSize } from "ox/Hex";
 import {
 	aggregateDecodedCalls,
 	encodeCalls,
 	type GhostcallAbiCall,
+	type GhostcallProvider,
 	GhostcallSubcallError,
+	type Hex,
 } from "../src/sdk/index.ts";
 
 const to = "0x1111111111111111111111111111111111111111";
@@ -14,34 +17,79 @@ const abi = Abi.from([
 	"function balanceOf(address owner) view returns (uint256)",
 ]);
 
-test("prepares ABI calldata and mixes ABI results with custom decoders in order", async (t) => {
-	const supply = AbiFunction.fromAbi(abi, "totalSupply");
-	const request = t.mock.fn<
-		Parameters<typeof aggregateDecodedCalls>[0]["request"]
-	>(
-		async () => `0x8020${AbiFunction.encodeResult(supply, 42n).slice(2)}8001ff`,
+/** Pack successful return data as a ghostcall response. */
+function successResponse(...returnData: Hex[]): Hex {
+	return `0x${returnData
+		.map((data) => `${(0x8000 | hexSize(data)).toString(16)}${data.slice(2)}`)
+		.join("")}`;
+}
+
+test("resolves overloads per call and mixes ABI results with custom decoders in order", async (t) => {
+	const overloadedAbi = Abi.from([
+		"function get(uint256 id) view returns (uint256)",
+		"function get(address owner) view returns (address)",
+		"event supply(uint256 amount)",
+		"function supply() view returns (uint256)",
+	]);
+	const getById = AbiFunction.fromAbi(overloadedAbi, "get", { args: [1n] });
+	const getByOwner = AbiFunction.fromAbi(overloadedAbi, "get", { args: [to] });
+	const supply = AbiFunction.fromAbi(overloadedAbi, "supply");
+	const request = t.mock.fn<GhostcallProvider["request"]>(async () =>
+		successResponse(
+			AbiFunction.encodeResult(getById, 7n),
+			AbiFunction.encodeResult(getByOwner, to),
+			AbiFunction.encodeResult(getById, 8n),
+			AbiFunction.encodeResult(supply, 9n),
+			"0xff",
+		),
 	);
 	assert.deepEqual(
 		await aggregateDecodedCalls({ request }, [
-			{ to, abi, functionName: "totalSupply" },
+			{ to, abi: overloadedAbi, functionName: "get", args: [1n] },
+			{ to, abi: overloadedAbi, functionName: "get", args: [to] },
+			{ to, abi: overloadedAbi, functionName: "get", args: [2n] },
+			{ to, abi: overloadedAbi, functionName: "supply" },
 			{ to, data: "0xaabb", decodeResult: (data) => data },
 		]),
-		[42n, "0xff"],
+		[7n, to, 8n, 9n, "0xff"],
 	);
-	assert.deepEqual(request.mock.calls[0]?.arguments, [
+	assert.deepEqual(request.mock.calls[0]?.arguments[0].params, [
 		{
-			method: "eth_call",
-			params: [
-				{
-					data: encodeCalls([
-						{ to, data: "0x18160ddd" },
-						{ to, data: "0xaabb" },
-					]),
-				},
-				"latest",
-			],
+			data: encodeCalls([
+				{ to, data: AbiFunction.encodeData(getById, [1n]) },
+				{ to, data: AbiFunction.encodeData(getByOwner, [to]) },
+				{ to, data: AbiFunction.encodeData(getById, [2n]) },
+				{ to, data: AbiFunction.encodeData(supply) },
+				{ to, data: "0xaabb" },
+			]),
 		},
+		"latest",
 	]);
+});
+
+test("checksums ABI-decoded addresses, including nested tuples and arrays", async () => {
+	const positionsAbi = Abi.from([
+		"function owner() view returns (address)",
+		"function positions() view returns ((address owner, address[] delegates)[])",
+	]);
+	const owner = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+	const lowercase = owner.toLowerCase() as Hex;
+	const response = successResponse(
+		AbiFunction.encodeResult(
+			AbiFunction.fromAbi(positionsAbi, "owner"),
+			lowercase,
+		),
+		AbiFunction.encodeResult(AbiFunction.fromAbi(positionsAbi, "positions"), [
+			{ owner: lowercase, delegates: [lowercase] },
+		]),
+	);
+	assert.deepEqual(
+		await aggregateDecodedCalls({ request: async () => response }, [
+			{ to, abi: positionsAbi, functionName: "owner" },
+			{ to, abi: positionsAbi, functionName: "positions" },
+		]),
+		[owner, [{ owner, delegates: [owner] }]],
+	);
 });
 
 test("invalid dynamic ABI calls fail before RPC", async (t) => {
@@ -61,50 +109,6 @@ test("invalid dynamic ABI calls fail before RPC", async (t) => {
 	assert.equal(request.mock.callCount(), 0);
 });
 
-test("resolves overloaded names per call within one batch", async (t) => {
-	const overloadedAbi = Abi.from([
-		"function get(uint256 id) view returns (uint256)",
-		"function get(address owner) view returns (address)",
-		"event supply(uint256 amount)",
-		"function supply() view returns (uint256)",
-	]);
-	const getById = AbiFunction.fromAbi(overloadedAbi, "get", { args: [1n] });
-	const getByOwner = AbiFunction.fromAbi(overloadedAbi, "get", { args: [to] });
-	const supply = AbiFunction.fromAbi(overloadedAbi, "supply");
-	const returnData = [
-		AbiFunction.encodeResult(getById, 7n),
-		AbiFunction.encodeResult(getByOwner, to),
-		AbiFunction.encodeResult(getById, 8n),
-		AbiFunction.encodeResult(supply, 9n),
-	];
-	const request = t.mock.fn<
-		Parameters<typeof aggregateDecodedCalls>[0]["request"]
-	>(
-		async () =>
-			`0x${returnData.map((data) => `8020${data.slice(2)}`).join("")}`,
-	);
-	assert.deepEqual(
-		await aggregateDecodedCalls({ request }, [
-			{ to, abi: overloadedAbi, functionName: "get", args: [1n] },
-			{ to, abi: overloadedAbi, functionName: "get", args: [to] },
-			{ to, abi: overloadedAbi, functionName: "get", args: [2n] },
-			{ to, abi: overloadedAbi, functionName: "supply" },
-		]),
-		[7n, to, 8n, 9n],
-	);
-	assert.deepEqual(request.mock.calls[0]?.arguments[0].params, [
-		{
-			data: encodeCalls([
-				{ to, data: AbiFunction.encodeData(getById, [1n]) },
-				{ to, data: AbiFunction.encodeData(getByOwner, [to]) },
-				{ to, data: AbiFunction.encodeData(getById, [2n]) },
-				{ to, data: AbiFunction.encodeData(supply) },
-			]),
-		},
-		"latest",
-	]);
-});
-
 test("ABI subcall failures expose the executed calldata and raw revert data", async () => {
 	await assert.rejects(
 		aggregateDecodedCalls({ request: async () => "0x0004deadbeef" }, [
@@ -113,10 +117,7 @@ test("ABI subcall failures expose the executed calldata and raw revert data", as
 		(error: unknown) => {
 			assert.ok(error instanceof GhostcallSubcallError);
 			assert.equal(error.call.data, "0x18160ddd");
-			assert.deepEqual(error.result, {
-				success: false,
-				returnData: "0xdeadbeef",
-			});
+			assert.equal(error.returnData, "0xdeadbeef");
 			return true;
 		},
 	);

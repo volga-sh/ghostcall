@@ -3,6 +3,7 @@ import {
 	aggregateDecodedCalls,
 	type GhostcallAbiCall,
 	type GhostcallDecodedCall,
+	type GhostcallProvider,
 	type Hex,
 } from "../src/sdk/index.ts";
 
@@ -20,14 +21,16 @@ const abi = Abi.from([
 	"event Transfer(address indexed from, address indexed to, uint256 amount)",
 ]);
 const to = "0x1111111111111111111111111111111111111111";
-type Provider = Parameters<typeof aggregateDecodedCalls>[0];
 
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
 		? true
 		: false;
 
-async function checkDecodedTypes(provider: Provider): Promise<void> {
+/** Fails to compile unless its type argument is `true`. */
+function assertType<_T extends true>(): void {}
+
+async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 	const results = await aggregateDecodedCalls(provider, [
 		{ to, abi, functionName: "totalSupply" },
 		{ to, abi, functionName: "balanceOf", args: [to] },
@@ -39,63 +42,57 @@ async function checkDecodedTypes(provider: Provider): Promise<void> {
 		{ to, abi, functionName: "lookup", args: [1n] },
 		{ to, abi, functionName: "lookup", args: [to] },
 		{ to, abi, functionName: "lookup" },
-		{ to, data: "0x", decodeResult: (data) => data.length },
+		{ to, data: "0x", decodeResult: (data, index) => data.length + index },
 	]);
-	const exactResults: Equal<
-		typeof results,
-		[
-			bigint,
-			bigint,
-			number,
-			string,
-			readonly [boolean, bigint],
-			undefined,
-			readonly { owner: Hex; amount: bigint }[],
-			boolean,
-			string,
-			bigint,
-			number,
-		]
-	> = true;
+	assertType<
+		Equal<
+			typeof results,
+			[
+				bigint,
+				bigint,
+				number,
+				string,
+				readonly [boolean, bigint],
+				undefined,
+				readonly { owner: Hex; amount: bigint }[],
+				boolean,
+				string,
+				bigint,
+				number,
+			]
+		>
+	>();
 
 	const calls = [
 		{ to, abi, functionName: "balanceOf", args: [to] },
 	] as const satisfies readonly GhostcallAbiCall<typeof abi>[];
-	const reused: [bigint] = await aggregateDecodedCalls(provider, calls);
+	const reused = await aggregateDecodedCalls(provider, calls);
+	assertType<Equal<typeof reused, [bigint]>>();
 	const rawCalls = [
 		{ to, data: "0x", decodeResult: (data) => data.length },
 		{ to, data: "0x", decodeResult: (data) => data.toUpperCase() },
 	] as const satisfies readonly GhostcallDecodedCall[];
 	const rawResults = await aggregateDecodedCalls(provider, rawCalls);
-	const exactRaw: Equal<typeof rawResults, [number, string]> = true;
+	assertType<Equal<typeof rawResults, [number, string]>>();
 	const array: GhostcallDecodedCall<number>[] = [
 		{ to, data: "0x", decodeResult: (data) => data.length },
 	];
-	const arrayResults: number[] = await aggregateDecodedCalls(provider, array);
+	const arrayResults = await aggregateDecodedCalls(provider, array);
+	assertType<Equal<typeof arrayResults, number[]>>();
 	const abiArray: Extract<
 		GhostcallAbiCall<typeof abi>,
 		{ functionName: "balanceOf" }
 	>[] = [{ to, abi, functionName: "balanceOf", args: [to] }];
-	const abiArrayResults: bigint[] = await aggregateDecodedCalls(
-		provider,
-		abiArray,
-	);
-	const empty: [] = await aggregateDecodedCalls(provider, []);
+	const abiArrayResults = await aggregateDecodedCalls(provider, abiArray);
+	assertType<Equal<typeof abiArrayResults, bigint[]>>();
+	const empty = await aggregateDecodedCalls(provider, []);
+	assertType<Equal<typeof empty, []>>();
 	const mixedArray: (GhostcallAbiCall | GhostcallDecodedCall)[] = [
 		...calls,
 		...array,
 	];
 	const mixedResults = await aggregateDecodedCalls(provider, mixedArray);
-	const exactMixed: Equal<typeof mixedResults, unknown[]> = true;
-	void [
-		exactResults,
-		reused,
-		exactRaw,
-		arrayResults,
-		abiArrayResults,
-		empty,
-		exactMixed,
-	];
+	assertType<Equal<typeof mixedResults, unknown[]>>();
 
 	const unknownName = { to, abi, functionName: "totalSuplpy" } as const;
 	// @ts-expect-error The function name must exist in this ABI.
@@ -173,14 +170,13 @@ async function checkDecodedTypes(provider: Provider): Promise<void> {
 }
 
 async function checkDynamicAbi(
-	provider: Provider,
+	provider: GhostcallProvider,
 	abi: Abi.Abi,
 ): Promise<void> {
 	const results = await aggregateDecodedCalls(provider, [
 		{ to, abi, functionName: "loadedAtRuntime", args: [1n] },
 	]);
-	const dynamicResult: Equal<typeof results, [unknown]> = true;
-	void dynamicResult;
+	assertType<Equal<typeof results, [unknown]>>();
 }
 
 void [checkDecodedTypes, checkDynamicAbi];

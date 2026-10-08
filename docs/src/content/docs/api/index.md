@@ -3,25 +3,17 @@ title: API Reference
 description: Choose a ghostcall function based on the required result.
 ---
 
-ghostcall exports four functions, one error class, and their TypeScript types.
-
-## Choose a function
+ghostcall exports four functions, one error class, and their
+[types](/api/types/).
 
 | Goal | Function |
 | --- | --- |
-| Send calls and decode every result | [`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/) |
-| Send calls and inspect raw success or failure results | [`aggregateCalls()`](/api/aggregate-calls/) |
-| Build request data without sending it | [`encodeCalls()`](/api/encode-calls/) |
-| Parse a manually sent response | [`decodeResults()`](/api/decode-results/) |
+| Decode every result; any failed call throws | [`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/) |
+| Inspect success flags and return data; let selected calls fail | [`aggregateCalls()`](/api/aggregate-calls/) |
+| Build request data for an `eth_call` sent by the application | [`encodeCalls()`](/api/encode-calls/) |
+| Parse the response to that `eth_call` | [`decodeResults()`](/api/decode-results/) |
 
-Use `aggregateDecodedCalls()` when every call must succeed and decoded values
-are needed. Pass `{ to, abi, functionName, args }` for automatic ABI handling,
-or `{ to, data, decodeResult }` for a custom decoder.
-Use `aggregateCalls()` with `{ to, data }` when some calls may fail or raw return data
-is needed. Use `encodeCalls()` and `decodeResults()` for manually sent RPC
-requests.
-
-## Exports
+[`GhostcallSubcallError`](/api/subcall-error/) identifies which call failed.
 
 ```ts
 import {
@@ -33,13 +25,4 @@ import {
 } from "@volga-sh/evm-ghostcall";
 ```
 
-[`GhostcallSubcallError`](/api/subcall-error/) identifies which contract call
-failed.
-
-See [Types](/api/types/) for the shared input, result, option, and provider
-types.
-
-## Next
-
-- Open the function page that matches the task.
-- Read [Limits](/limits/) before building unusually large batches.
+Read [Limits](/limits/) before building unusually large batches.

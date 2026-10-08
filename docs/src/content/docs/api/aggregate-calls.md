@@ -3,94 +3,65 @@ title: aggregateCalls
 description: Send a batch and return raw success or failure results.
 ---
 
-`aggregateCalls()` sends one `eth_call` and returns raw results in call order.
-Use it when success flags or revert data are needed, or when selected calls may
-fail.
+`aggregateCalls()` sends one `eth_call` and returns one
+[`GhostcallResult`](/api/types/) per call, in call order. Use it when success
+flags or revert data are needed, or when selected calls may fail.
 
 ## Usage
 
 ```ts
 import { aggregateCalls } from "@volga-sh/evm-ghostcall";
 
+const weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+
 const results = await aggregateCalls(client, [
-	{
-		// WETH totalSupply()
-		to: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-		data: "0x18160ddd",
-	},
-	{
-		to: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-		data: "0xdeadbeef",
-		allowFailure: true,
-	},
+	// totalSupply()
+	{ to: weth, data: "0x18160ddd" },
+	// If this call reverts, it returns success: false instead of throwing.
+	{ to: weth, data: "0xdeadbeef", allowFailure: true },
 ]);
+
+for (const { success, returnData } of results) console.log(success, returnData);
 ```
 
 ## Signature
 
 ```ts
 async function aggregateCalls(
-	provider: {
-		request(args: { method: string; params?: unknown }): Promise<unknown>;
-	},
+	provider: GhostcallProvider,
 	calls: readonly GhostcallCall[],
 	options?: GhostcallAggregateOptions,
 ): Promise<GhostcallResult[]>;
 ```
 
-## Parameters
+See [Types](/api/types/) for each type.
 
-### provider
+- `provider` needs a compatible `request` method, such as a viem client or an ox
+  transport.
+- `calls` run in order. Set `allowFailure: true` to return that entry with
+  `success: false` instead of throwing. The SDK applies it after the response
+  arrives; it is not sent to the EVM.
+- `options` apply to the whole batch. `maxInitcodeBytes` defaults to `49,152`.
 
-A provider with a compatible `request` method, such as a viem client or ox transport.
+## Block, sender, and gas
 
-### calls
-
-```ts
-import type { Hex } from "@volga-sh/evm-ghostcall";
-
-type GhostcallCall = {
-	to: Hex;
-	data: Hex;
-	allowFailure?: boolean;
-};
-```
-
-An ordered list of contract calls. Set `allowFailure: true` when that entry
-should be returned with `success: false` instead of throwing an error.
-
-`allowFailure` controls SDK behavior after the response arrives. It is not part
-of the bytes sent to the EVM.
-
-### options
+`ethCall` sets the outer `eth_call`. `blockTag` takes a `bigint` block number or
+a named tag and defaults to `"latest"`. Omitted `from` and `gas` use provider
+defaults.
 
 ```ts
-type GhostcallAggregateOptions = {
-	maxInitcodeBytes?: number;
-	ethCall?: {
-		from?: Hex;
-		gas?: Hex;
-		blockTag?: string | number | bigint;
-	};
-};
+const [result] = await aggregateCalls(client, [{ to: weth, data: "0x18160ddd" }], {
+	ethCall: {
+		blockTag: 19_000_000n,
+		from: "0x0000000000000000000000000000000000000000",
+		gas: 3_000_000n,
+	},
+});
 ```
-
-`blockTag` defaults to `"latest"`. Decimal block numbers are converted to RPC
-hex quantities. `maxInitcodeBytes` defaults to `49,152`.
-
-## Returns
-
-```ts
-type GhostcallResult =
-	| { success: true; returnData: Hex }
-	| { success: false; returnData: Hex };
-```
-
-The promise resolves to one result per call, in the same order.
 
 ## Throws
 
-- `TypeError` for invalid addresses, hex data, options, or provider responses.
+- `TypeError` for invalid addresses, hex data, or provider responses.
 - `RangeError` when one call or the full request exceeds its size limit.
 - [`GhostcallSubcallError`](/api/subcall-error/) when a call fails without
   `allowFailure: true`.
