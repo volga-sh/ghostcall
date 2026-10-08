@@ -72,17 +72,10 @@ optional failures.
 
 ## Provider and options
 
-The provider needs an EIP-1193-compatible `request` method
-([`GhostcallProvider`](/api/types/)). A viem public client, an ox transport, or a
-compatible custom provider works.
-
-See [`GhostcallAggregateOptions`](/api/types/#aggregate-options) for the shared options.
-
-`blockTag` takes a `bigint` block number or a named tag and defaults to
-`"latest"`. `maxInitcodeBytes` defaults to `49,152` bytes,
-including the initcode and all encoded call entries. Options apply to the whole
-batch. Execution still uses zero-value `CALL`; non-view functions may modify
-simulated state for later calls, as described in [Protocol](/protocol/).
+The provider and [options](/api/types/) match
+[`aggregateCalls()`](/api/aggregate-calls/#block-sender-and-gas). Subcalls use
+zero-value `CALL`, so non-view functions may change simulated state for later
+calls in the batch.
 
 ## Errors
 

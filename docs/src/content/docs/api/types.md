@@ -1,24 +1,48 @@
 ---
 title: Types
-description: The eight public TypeScript types exported by ghostcall.
+description: The public TypeScript types exported by ghostcall.
 ---
 
-Import shared SDK types from `@volga-sh/evm-ghostcall`. ghostcall defines and
-exports its own `Hex` type and seven call, result, provider, and options types:
+Import types from `@volga-sh/evm-ghostcall`. Function pages link here instead of
+repeating these definitions.
 
-| Type | Purpose |
-| --- | --- |
-| `Hex` | A `0x`-prefixed string, defined by ghostcall. |
-| `GhostcallCall` | `{ to: Hex; data: Hex; allowFailure?: boolean }`. Encoding ignores the failure policy; `aggregateCalls()` uses it to decide whether to throw. |
-| `GhostcallAbiCall<TAbi>` | An ABI-described call with a function name and typed arguments. |
-| `GhostcallDecodedCall<TResult>` | Raw calldata with a custom decoder returning `TResult`. |
-| `GhostcallResult` | `{ success: boolean; returnData: Hex }`. |
-| `GhostcallProvider` | Any object with a `request({ method, params })` method returning a promise. |
-| `GhostcallEncodeOptions` | `{ maxInitcodeBytes?: number }`, defaulting to 49,152 bytes for the full CREATE request. |
-| `GhostcallAggregateOptions` | Encoding options plus the outer `ethCall` options below. |
+```ts
+type Hex = `0x${string}`;
+
+type GhostcallCall = {
+	to: Hex;
+	data: Hex;
+	// aggregateCalls() only: return this failure instead of throwing.
+	allowFailure?: boolean;
+};
+
+type GhostcallResult = { success: boolean; returnData: Hex };
+
+type GhostcallProvider = {
+	request(args: { method: string; params?: unknown }): Promise<unknown>;
+};
+
+type GhostcallEncodeOptions = {
+	maxInitcodeBytes?: number; // Default: 49,152, the full CREATE request.
+};
+
+type GhostcallAggregateOptions = GhostcallEncodeOptions & {
+	ethCall?: {
+		from?: Hex;
+		gas?: bigint;
+		// Default: "latest".
+		blockTag?: bigint | "latest" | "earliest" | "pending" | "safe" | "finalized";
+	};
+};
+```
 
 Addresses must contain 20 bytes. Calldata and returndata must be even-length,
-`0x`-prefixed hex. The SDK validates these boundaries at runtime.
+`0x`-prefixed hex. The SDK validates these values at runtime. Block numbers and
+`gas` are sent as RPC hex quantities.
+
+`GhostcallAbiCall<TAbi>` and `GhostcallDecodedCall<TResult>` are the two entry
+forms accepted by [`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/): an
+ABI function call, or raw calldata with a custom decoder returning `TResult`.
 
 ## Declaring reusable calls
 
@@ -34,28 +58,6 @@ const calls = [
 ] as const satisfies readonly GhostcallAbiCall<typeof abi>[];
 ```
 
-Functions with inputs require `args`. ABI calls do not accept `data` or
-`decodeResult`; raw decoded calls require both. Neither decoded form accepts
-`allowFailure`. Custom decoders receive `(returnData, index)`.
-
 `aggregateDecodedCalls()` infers each tuple position, including argument-selected
 ABI overloads. Ordinary arrays produce arrays of the result union, empty tuples
 produce `[]`, and broadly typed ABIs loaded at runtime produce `unknown` results.
-
-## Aggregate options
-
-```ts
-import type { Hex } from "@volga-sh/evm-ghostcall";
-
-type GhostcallAggregateOptions = {
-	maxInitcodeBytes?: number;
-	ethCall?: {
-		from?: Hex;
-		gas?: bigint;
-		blockTag?: bigint | "latest" | "earliest" | "pending" | "safe" | "finalized";
-	};
-};
-```
-
-The block defaults to `"latest"`. Block numbers and `gas` are sent as RPC hex
-quantities. Options apply to the whole batch.

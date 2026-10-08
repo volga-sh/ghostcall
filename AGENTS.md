@@ -43,7 +43,7 @@ npm run check:sdk:initcode   # Verify generated initcode is up to date
 - `src/sdk/abi.ts` connects ABI-described calls to the wire-format layer. Reuse ox's ABI encoding, decoding, and types rather than implementing a separate codec.
 - `scripts/generate-sdk-initcode.ts` derives the bundled initcode from the Foundry artifact. Fix generation issues in the source or generator, not in the generated file.
 - `test/support/` contains RPC, Anvil, ABI, and artifact helpers for integration tests.
-- `README.md` documents the public protocol and SDK contract. If public semantics change, update it.
+- `docs/` is the public documentation for the protocol and SDK contract. If public semantics change, update it. `README.md` stays a short pointer to it.
 
 ### Main Design Philosophy
 
@@ -64,7 +64,7 @@ The SDK should remain a translation layer, not a framework. Avoid adding abstrac
 5. Prefer integration testing with real Anvil execution over mocks of protocol behavior.
 6. Let provider and RPC errors bubble unless wrapping adds real clarity.
 7. Keep implementations straightforward; do not trade readability for cleverness.
-8. Keep Yul, generated initcode, SDK behavior, tests, and README examples in lockstep.
+8. Keep Yul, generated initcode, SDK behavior, tests, and docs examples in lockstep.
 
 ### API Design Philosophy
 
@@ -109,7 +109,7 @@ Tests in this repository are real execution tests, not abstract unit exercises.
 
 - Public SDK functions should have accurate JSDoc.
 - Examples should be runnable, concise, and focused on `ghostcall`, not on provider boilerplate.
-- README examples should reflect actual tested behavior.
+- Docs examples should reflect actual tested behavior.
 - Internal helpers with non-obvious invariants should have short comments or docstrings.
 
 ### TypeScript Conventions
@@ -172,7 +172,7 @@ Do not add redundant runtime validation where TypeScript already proves the inva
 - [ ] Public behavior changes are covered by tests.
 - [ ] Edge cases and failure paths are tested.
 - [ ] `src/Ghostcall.yul` changes are reflected in regenerated SDK initcode.
-- [ ] README and JSDoc still match actual behavior.
+- [ ] Docs and JSDoc still match actual behavior.
 - [ ] No new abstraction hides important protocol semantics.
 - [ ] Runtime validation is present at untrusted input boundaries.
 

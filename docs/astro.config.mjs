@@ -99,10 +99,7 @@ export default defineConfig({
 			sidebar: [
 				{
 					label: "Guides",
-					items: [
-						{ label: "Getting Started", slug: "getting-started" },
-						{ label: "Recipes", slug: "examples" },
-					],
+					items: [{ label: "Getting Started", slug: "getting-started" }],
 				},
 				{
 					label: "API",
