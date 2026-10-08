@@ -91,8 +91,8 @@ for the removed helper aliases. Runtime exports are unchanged.
 
 ## Development
 
-Use Node.js from `.nvmrc`, npm 12.1.0, and Foundry v1.8.3. CI also tests the
-latest Node.js 24 LTS release. Foundry installs the compiler pinned in
+Use the latest Node.js 24 LTS release pinned in `.nvmrc`, npm 12.1.0, and
+Foundry v1.8.3. CI also tests Node.js 26. Foundry installs the compiler pinned in
 `foundry.toml` (Solidity 0.8.37); the EVM target stays Prague for compatibility.
 
 ```sh
