@@ -62,12 +62,22 @@ type GhostcallAbiResult<TCall extends GhostcallAbiCall> =
 		Extract<ResolvedFunction<TCall>, AbiFunction.AbiFunction>
 	>;
 
+/**
+ * Functions resolved within one batch, keyed by ABI object and function name.
+ * `null` marks a name that must be resolved per call from its arguments.
+ */
+type ResolvedAbiFunctions = Map<
+	Abi,
+	Map<string, AbiFunction.AbiFunction | null>
+>;
+
 /** Bind encoding and decoding to the same resolved ABI function. */
-function prepareAbiCall(call: GhostcallAbiCall): GhostcallDecodedCall {
+function prepareAbiCall(
+	call: GhostcallAbiCall,
+	resolvedFunctions: ResolvedAbiFunctions,
+): GhostcallDecodedCall {
 	const args = call.args ?? [];
-	const abiFunction = AbiFunction.fromAbi(call.abi, call.functionName, {
-		args,
-	});
+	const abiFunction = resolveAbiFunction(call, args, resolvedFunctions);
 
 	// ox permits selector-only encoding with no args. At this wire boundary,
 	// missing arguments must fail before RPC, including for dynamically loaded ABIs.
@@ -85,5 +95,33 @@ function prepareAbiCall(call: GhostcallAbiCall): GhostcallDecodedCall {
 	};
 }
 
-export type { GhostcallAbiCall, GhostcallAbiResult };
+// Each ox lookup hashes the function signature, so batches that repeat one
+// function resolve it once. ox ignores args when exactly one ABI item has the
+// name, of any item type. Other names resolve per call, by argument types.
+function resolveAbiFunction(
+	call: GhostcallAbiCall,
+	args: readonly unknown[],
+	resolvedFunctions: ResolvedAbiFunctions,
+): AbiFunction.AbiFunction {
+	let functions = resolvedFunctions.get(call.abi);
+	if (functions === undefined) {
+		functions = new Map();
+		resolvedFunctions.set(call.abi, functions);
+	}
+	const resolved = functions.get(call.functionName);
+	if (resolved) return resolved;
+
+	const abiFunction = AbiFunction.fromAbi(call.abi, call.functionName, {
+		args,
+	});
+	if (resolved === undefined) {
+		const matches = call.abi.filter(
+			(item) => "name" in item && item.name === call.functionName,
+		);
+		functions.set(call.functionName, matches.length === 1 ? abiFunction : null);
+	}
+	return abiFunction;
+}
+
+export type { GhostcallAbiCall, GhostcallAbiResult, ResolvedAbiFunctions };
 export { prepareAbiCall };

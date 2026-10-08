@@ -54,7 +54,55 @@ test("invalid dynamic ABI calls fail before RPC", async (t) => {
 	];
 	for (const call of calls)
 		await assert.rejects(aggregateDecodedCalls({ request }, [call]));
+	// Resolving a repeated function once must not skip per-call argument checks.
+	const balanceOf = { to, abi, functionName: "balanceOf", args: [to] } as const;
+	for (const call of calls)
+		await assert.rejects(aggregateDecodedCalls({ request }, [balanceOf, call]));
 	assert.equal(request.mock.callCount(), 0);
+});
+
+test("resolves overloaded names per call within one batch", async (t) => {
+	const overloadedAbi = Abi.from([
+		"function get(uint256 id) view returns (uint256)",
+		"function get(address owner) view returns (address)",
+		"event supply(uint256 amount)",
+		"function supply() view returns (uint256)",
+	]);
+	const getById = AbiFunction.fromAbi(overloadedAbi, "get", { args: [1n] });
+	const getByOwner = AbiFunction.fromAbi(overloadedAbi, "get", { args: [to] });
+	const supply = AbiFunction.fromAbi(overloadedAbi, "supply");
+	const returnData = [
+		AbiFunction.encodeResult(getById, 7n),
+		AbiFunction.encodeResult(getByOwner, to),
+		AbiFunction.encodeResult(getById, 8n),
+		AbiFunction.encodeResult(supply, 9n),
+	];
+	const request = t.mock.fn<
+		Parameters<typeof aggregateDecodedCalls>[0]["request"]
+	>(
+		async () =>
+			`0x${returnData.map((data) => `8020${data.slice(2)}`).join("")}`,
+	);
+	assert.deepEqual(
+		await aggregateDecodedCalls({ request }, [
+			{ to, abi: overloadedAbi, functionName: "get", args: [1n] },
+			{ to, abi: overloadedAbi, functionName: "get", args: [to] },
+			{ to, abi: overloadedAbi, functionName: "get", args: [2n] },
+			{ to, abi: overloadedAbi, functionName: "supply" },
+		]),
+		[7n, to, 8n, 9n],
+	);
+	assert.deepEqual(request.mock.calls[0]?.arguments[0].params, [
+		{
+			data: encodeCalls([
+				{ to, data: AbiFunction.encodeData(getById, [1n]) },
+				{ to, data: AbiFunction.encodeData(getByOwner, [to]) },
+				{ to, data: AbiFunction.encodeData(getById, [2n]) },
+				{ to, data: AbiFunction.encodeData(supply) },
+			]),
+		},
+		"latest",
+	]);
 });
 
 test("ABI subcall failures expose the executed calldata and raw revert data", async () => {

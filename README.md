@@ -104,6 +104,11 @@ npm run test
 npm run check
 ```
 
+To measure SDK encoding, decoding, and batching without network latency, run
+`npm run benchmark:sdk`. It reports median timings for 1, 100, and 700 calls and
+sampled allocation estimates, including temporary objects collected by GC.
+Allocation figures measure bytes allocated per batch, not peak or retained memory.
+
 To work on the documentation:
 
 ```sh

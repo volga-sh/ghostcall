@@ -5,6 +5,7 @@ import {
 	type GhostcallAbiCall,
 	type GhostcallAbiResult,
 	prepareAbiCall,
+	type ResolvedAbiFunctions,
 } from "./abi.ts";
 import { ghostcallInitcode } from "./generated/initcode.ts";
 
@@ -123,12 +124,13 @@ function encodeCalls(
 			"options.maxInitcodeBytes must be a non-negative safe integer",
 		);
 	}
-	const encodedParts = [ghostcallInitcode.slice(2)];
+	let encodedData: Hex = ghostcallInitcode;
 	let totalEncodedSize = bundledInitcodeSize;
 	const sizeError = `encoded Ghostcall initcode exceeds the ${maxInitcodeBytes}-byte CREATE initcode limit`;
 	if (totalEncodedSize > maxInitcodeBytes) throw new RangeError(sizeError);
 
-	for (const [index, call] of calls.entries()) {
+	let index = 0;
+	for (const call of calls) {
 		assertAddress(call.to, `calls[${index}].to`);
 		const calldata = assertHex(call.data, `calls[${index}].data`);
 		const calldataSize = hexSize(calldata);
@@ -139,13 +141,13 @@ function encodeCalls(
 		}
 		totalEncodedSize += encodedCallHeaderSize + calldataSize;
 		if (totalEncodedSize > maxInitcodeBytes) throw new RangeError(sizeError);
-		encodedParts.push(
-			calldataSize.toString(16).padStart(4, "0"),
-			call.to.slice(2),
-			calldata.slice(2),
-		);
+		const header = calldataSize
+			.toString(16)
+			.padStart(encodedHeaderHexLength, "0");
+		encodedData = `${encodedData}${header}${call.to.slice(2)}${calldata.slice(2)}`;
+		index += 1;
 	}
-	return `0x${encodedParts.join("")}`;
+	return encodedData;
 }
 
 /**
@@ -172,17 +174,19 @@ async function aggregateCalls(
 		method: "eth_call",
 		params: [ethCall, normalizeBlockTag(blockTag ?? "latest")],
 	});
-	const entries = decodeResults(assertHex(result, "eth_call result"));
+	const entries = decodeValidatedResults(assertHex(result, "eth_call result"));
 	if (entries.length !== calls.length) {
 		throw new Error(
 			`Ghostcall returned ${entries.length} result entries for ${calls.length} calls`,
 		);
 	}
-	for (const [index, entry] of entries.entries()) {
+	let index = 0;
+	for (const entry of entries) {
 		const call = calls[index] as GhostcallCall;
 		if (!entry.success && call.allowFailure !== true) {
 			throw new GhostcallSubcallError(index, call, entry);
 		}
+		index += 1;
 	}
 	return entries;
 }
@@ -199,8 +203,9 @@ async function aggregateDecodedCalls<
 	calls: TCalls & NoInfer<ValidatedDecodedCalls<TCalls>>,
 	options?: GhostcallAggregateOptions,
 ): Promise<GhostcallDecodedResults<TCalls>> {
+	const resolvedFunctions: ResolvedAbiFunctions = new Map();
 	const preparedCalls = calls.map((call) =>
-		call.abi === undefined ? call : prepareAbiCall(call),
+		call.abi === undefined ? call : prepareAbiCall(call, resolvedFunctions),
 	);
 	const entries = await aggregateCalls(provider, preparedCalls, options);
 	return entries.map((entry, index) => {
@@ -214,25 +219,29 @@ async function aggregateDecodedCalls<
 
 /** Decode ordered [success bit | uint15 length][returndata] entries. Reject malformed data. */
 function decodeResults(data: Hex): GhostcallResult[] {
-	const encodedData = assertHex(data, "data").slice(2);
+	return decodeValidatedResults(assertHex(data, "data"));
+}
+
+/** Parse only after the public API or RPC boundary has validated the entire hex string. */
+function decodeValidatedResults(data: Hex): GhostcallResult[] {
 	const results: GhostcallResult[] = [];
-	let cursor = 0;
-	while (cursor < encodedData.length) {
-		if (cursor + encodedHeaderHexLength > encodedData.length) {
+	let cursor = 2;
+	while (cursor < data.length) {
+		if (cursor + encodedHeaderHexLength > data.length) {
 			throw new TypeError("Truncated Ghostcall response header");
 		}
 		const header = Number.parseInt(
-			encodedData.slice(cursor, cursor + encodedHeaderHexLength),
+			data.slice(cursor, cursor + encodedHeaderHexLength),
 			16,
 		);
 		cursor += encodedHeaderHexLength;
 		const returnDataEnd = cursor + (header & returnDataLengthMask) * 2;
-		if (returnDataEnd > encodedData.length) {
+		if (returnDataEnd > data.length) {
 			throw new TypeError("Truncated Ghostcall response body");
 		}
 		results.push({
 			success: (header & successFlagMask) !== 0,
-			returnData: `0x${encodedData.slice(cursor, returnDataEnd)}`,
+			returnData: `0x${data.slice(cursor, returnDataEnd)}`,
 		});
 		cursor = returnDataEnd;
 	}
