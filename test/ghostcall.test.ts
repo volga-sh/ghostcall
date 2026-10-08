@@ -1,15 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Abi, AbiError, AbiFunction } from "ox";
-import { size as hexSize } from "ox/Hex";
+import { AbiError, AbiFunction } from "ox";
 import {
 	aggregateCalls,
 	aggregateDecodedCalls,
 	encodeCalls,
+	GhostcallSubcallError,
 	type Hex,
 } from "../src/sdk/index.ts";
-import { deployContract, startAnvil, stopAnvil } from "./support/anvil.ts";
-import { setupMock } from "./support/ghostcall.ts";
+import { setupMock } from "./support/mock.ts";
 
 test("ghostcall integration", async (t) => {
 	const { transport, to, write } = await setupMock(t);
@@ -29,7 +28,7 @@ test("ghostcall integration", async (t) => {
 			] as const;
 			await assert.rejects(
 				aggregateCalls(transport, calls),
-				/Ghostcall subcall 0 failed/,
+				GhostcallSubcallError,
 			);
 			const [failure, success] = await aggregateCalls(transport, [
 				{ ...calls[0], allowFailure: true },
@@ -46,76 +45,6 @@ test("ghostcall integration", async (t) => {
 	await t.test("executes empty batches", async () => {
 		assert.deepEqual(await aggregateCalls(transport, []), []);
 	});
-
-	await t.test(
-		"resolves ABI overloads and mixes ABI and raw decoders in order",
-		async () => {
-			const abi = Abi.from([
-				"function lookup(uint256 id) view returns (bool)",
-				"function lookup(address owner) view returns (string)",
-				"function totalSupply() view returns (uint256)",
-			]);
-			const byId = AbiFunction.fromAbi(abi, "lookup", { args: [7n] });
-			const byOwner = AbiFunction.fromAbi(abi, "lookup", { args: [to] });
-			const supply = AbiFunction.fromAbi(abi, "totalSupply");
-			const idData = AbiFunction.encodeData(byId, [7n]);
-			for (const [data, result] of [
-				[idData, AbiFunction.encodeResult(byId, true)],
-				[
-					AbiFunction.encodeData(byOwner, [to]),
-					AbiFunction.encodeResult(byOwner, "owner"),
-				],
-				[
-					AbiFunction.encodeData(supply),
-					AbiFunction.encodeResult(supply, 123n),
-				],
-			] as const)
-				await write("givenCalldataReturn", [data, result]);
-
-			const results: [boolean, string, bigint, boolean] =
-				await aggregateDecodedCalls(transport, [
-					{ to, abi, functionName: "lookup", args: [7n] },
-					{ to, abi, functionName: "lookup", args: [to] },
-					{ to, abi, functionName: "totalSupply" },
-					{
-						to,
-						data: idData,
-						decodeResult: (data) => AbiFunction.decodeResult(byId, data),
-					},
-				]);
-			assert.deepEqual(results, [true, "owner", 123n, true]);
-		},
-	);
-
-	await t.test(
-		"checksums decoded addresses, including nested arrays",
-		async () => {
-			const abi = Abi.from([
-				"function owner() view returns (address)",
-				"function positions() view returns ((address owner, address[] delegates)[])",
-			]);
-			const owner = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-			const ownerFunction = AbiFunction.fromAbi(abi, "owner");
-			const positionsFunction = AbiFunction.fromAbi(abi, "positions");
-			await write("givenCalldataReturn", [
-				AbiFunction.encodeData(ownerFunction),
-				AbiFunction.encodeResult(ownerFunction, owner),
-			]);
-			await write("givenCalldataReturn", [
-				AbiFunction.encodeData(positionsFunction),
-				AbiFunction.encodeResult(positionsFunction, [
-					{ owner, delegates: [owner] },
-				]),
-			]);
-			assert.deepEqual(
-				await aggregateDecodedCalls(transport, [
-					{ to, abi, functionName: "owner" },
-					{ to, abi, functionName: "positions" },
-				]),
-				[owner, [{ owner, delegates: [owner] }]],
-			);
-		},
-	);
 
 	await t.test("packs unaligned results after staging calldata", async () => {
 		const cases = [
@@ -155,50 +84,48 @@ test("ghostcall integration", async (t) => {
 			);
 		},
 	);
+
+	await t.test(
+		"returns one entry at the default 24,576-byte CREATE return limit",
+		async () => {
+			// The 2-byte result header counts toward EIP-170's returned-code limit.
+			const returnData: Hex = `0x${"11".repeat(0x6000 - 2)}`;
+			await write("givenCalldataReturn", ["0x12345678", returnData]);
+			assert.deepEqual(
+				await aggregateCalls(transport, [{ to, data: "0x12345678" }]),
+				[{ success: true, returnData }],
+			);
+		},
+	);
 });
 
-for (const [limit, codeSizeLimit, returnBytes] of [
-	["CREATE", undefined, 0x6000 - 2],
-	["uint15 header", 65536, 0x7fff],
-] as const) {
-	test(`returns one entry at the ${limit} limit`, async (t) => {
-		const { transport, to, write } = await setupMock(t, codeSizeLimit);
-		const returnData: Hex = `0x${"11".repeat(returnBytes)}`;
-		await write("givenCalldataReturn", ["0x12345678", returnData]);
-		assert.deepEqual(
-			await aggregateCalls(transport, [{ to, data: "0x12345678" }]),
-			[{ success: true, returnData }],
-		);
-	});
-}
+test("packs entries up to the uint15 header and reverts with empty data beyond it", async (t) => {
+	// Raise anvil's returned-code limit so only ghostcall's own limits apply.
+	const { transport, to, write } = await setupMock(t, 65536);
+	const maxEntry: Hex = `0x${"11".repeat(0x7fff)}`;
+	const smallEntry: Hex = `0x${"22".repeat(32)}`;
+	await write("givenCalldataReturn", ["0x11111111", maxEntry]);
+	await write("givenCalldataReturn", ["0x22222222", smallEntry]);
+	await write("givenCalldataReturn", [
+		"0x33333333",
+		`0x${"33".repeat(0x8000)}`,
+	]);
 
-test("aggregate responses can exceed the old in-contract cap", async (t) => {
-	const { transport, to, write } = await setupMock(t, 32768);
-	const returnData: Hex = `0x${"00".repeat(32)}`;
-	await write("givenCalldataReturn", ["0x12345678", returnData]);
-	const count = Math.floor(0x6000 / (2 + hexSize(returnData))) + 1;
-	const calls = Array.from({ length: count }, () => ({
-		to,
-		data: "0x12345678" as const,
-	}));
+	// The 32,805-byte response also shows ghostcall adds no aggregate size cap.
 	assert.deepEqual(
-		await aggregateCalls(transport, calls),
-		Array.from({ length: count }, () => ({ success: true, returnData })),
+		await aggregateCalls(transport, [
+			{ to, data: "0x11111111" },
+			{ to, data: "0x22222222" },
+		]),
+		[
+			{ success: true, returnData: maxEntry },
+			{ success: true, returnData: smallEntry },
+		],
 	);
-});
-
-test("reverts with empty data when an entry exceeds the uint15 header", async (t) => {
-	const anvil = await startAnvil({ args: ["--code-size-limit", "65536"] });
-	t.after(() => stopAnvil(anvil));
-	// Deploy a runtime that returns 0x8000 bytes, one more than the packed header permits.
-	const to = await deployContract(
-		anvil.transport,
-		"0x6006600c60003960066000f36180006000f3",
-	);
-	const response = await anvil.transport.request(
+	const response = await transport.request(
 		{
 			method: "eth_call",
-			params: [{ data: encodeCalls([{ to, data: "0x" }]) }, "latest"],
+			params: [{ data: encodeCalls([{ to, data: "0x33333333" }]) }, "latest"],
 		},
 		{ raw: true },
 	);

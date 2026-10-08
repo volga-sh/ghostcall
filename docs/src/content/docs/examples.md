@@ -50,8 +50,9 @@ contains revert data when the contract returned any.
 
 ## Set the block, sender, and gas
 
-Pass outer `eth_call` options through `ethCall`. Numeric block values are sent as
-hex quantities.
+Pass outer `eth_call` options through `ethCall`. `blockTag` takes a `bigint`
+block number or a named tag such as `"finalized"`. Block numbers and `gas` are
+sent as hex quantities.
 
 ```ts
 import { aggregateCalls } from "@volga-sh/evm-ghostcall";
@@ -69,7 +70,7 @@ const [result] = await aggregateCalls(
 		ethCall: {
 			blockTag: 19_000_000n,
 			from: "0x0000000000000000000000000000000000000000",
-			gas: "0x2dc6c0",
+			gas: 3_000_000n,
 		},
 	},
 );

@@ -23,7 +23,8 @@
 	},
 	"files": [
 		"dist/",
-		"src/Ghostcall.yul"
+		"src/Ghostcall.yul",
+		"src/sdk/"
 	],
 	"sideEffects": false,
 	"publishConfig": {
@@ -41,10 +42,7 @@
 		"docs:preview": "npm run preview --prefix docs --",
 		"check:sdk:initcode": "git diff --exit-code -- src/sdk/generated/initcode.ts",
 		"format": "biome format --write .",
-		"format:check": "biome format .",
-		"generate:sdk:initcode": "node scripts/generate-sdk-initcode.mjs",
-		"lint": "biome lint .",
-		"lint:fix": "npm run check:fix",
+		"generate:sdk:initcode": "node scripts/generate-sdk-initcode.ts",
 		"prepack": "npm run build:sdk",
 		"test": "npm run build:contracts && node --test test/*.test.ts",
 		"test:watch": "node --test --watch test/*.test.ts",

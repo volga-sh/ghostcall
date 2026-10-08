@@ -6,6 +6,7 @@ import { from as parseAbi } from "ox/Abi";
 import type {
 	GhostcallAbiCall,
 	GhostcallDecodedCall,
+	GhostcallProvider,
 	Hex,
 } from "../src/sdk/index.ts";
 
@@ -76,7 +77,7 @@ for (const count of [1, 100, 700]) {
 		decodeResult: (data) => data.length,
 	}));
 	const response: Hex = `0x${`8020${"ab".repeat(32)}`.repeat(count)}`;
-	const provider: Parameters<typeof sdk.aggregateCalls>[0] = {
+	const provider: GhostcallProvider = {
 		request: async ({ params }) => {
 			const [{ data }] = params as [{ data: Hex }, string];
 			checksum ^= data.charCodeAt(data.length - 1);

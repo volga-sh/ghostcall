@@ -53,9 +53,6 @@ Function names, arguments, and results are inferred from the ABI. Functions
 with inputs require `args`, for example `args: [owner]` for `balanceOf`.
 Keep ABIs literal with `as const`, viem's `parseAbi`, or ox's `Abi.from`.
 
-Since 0.0.5, ABI-decoded addresses are checksummed, including addresses nested in
-tuples and arrays. Earlier versions returned lowercase addresses.
-
 For already-encoded calldata, use the raw API:
 
 ```ts
@@ -84,16 +81,7 @@ two-call walkthrough.
 Read the [API reference](https://ghostcall.volga.sh/api/) for signatures,
 options, return types, and errors.
 
-The public type surface contains seven types, including ghostcall's own `Hex`.
-`GhostcallAggregateCall` is merged into `GhostcallCall`. See
-[type import migration](https://ghostcall.volga.sh/api/types/#migrating-type-imports)
-for the removed helper aliases. Runtime exports are unchanged.
-
 ## Development
-
-Use the latest Node.js 24 LTS release pinned in `.nvmrc`, npm 12.1.0, and
-Foundry v1.8.3. CI also tests Node.js 26. Foundry installs the compiler pinned in
-`foundry.toml` (Solidity 0.8.37); the EVM target stays Prague for compatibility.
 
 ```sh
 nvm install
@@ -104,18 +92,8 @@ npm run test
 npm run check
 ```
 
-To measure SDK encoding, decoding, and batching without network latency, run
-`npm run benchmark:sdk`. It reports median timings for 1, 100, and 700 calls and
-sampled allocation estimates, including temporary objects collected by GC.
-Allocation figures measure bytes allocated per batch, not peak or retained memory.
-
-To work on the documentation:
-
-```sh
-npm ci --prefix docs
-npm run docs:dev
-npm run docs:build
-```
+See [Development](https://ghostcall.volga.sh/development/) for toolchain
+versions, the Yul workflow, benchmarks, and docs.
 
 The source is hosted at
 [github.com/volga-sh/ghostcall](https://github.com/volga-sh/ghostcall).

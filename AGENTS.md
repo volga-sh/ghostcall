@@ -9,8 +9,12 @@ This file provides project instructions for coding agents working in the `ghostc
 - `src/Ghostcall.yul` is the core protocol implementation. It is initcode, not deployed runtime code.
 - `src/sdk/index.ts` is the public SDK surface for request encoding and response decoding.
 - `src/sdk/generated/initcode.ts` is generated from the Foundry artifact and must not be edited by hand.
+- `src/sdk/abi.ts` prepares ABI-described calls for the wire-format layer.
 - `test/ghostcall.test.ts` covers end-to-end protocol behavior against a real local chain.
 - `test/sdk.test.ts` covers the SDK's wire-format encoding and decoding rules.
+- `test/abi.test.ts` covers ABI call preparation, overload resolution, and decoding.
+- `test/sdk.typecheck.ts` pins inferred public types and runs under `npm run typecheck`.
+- `scripts/` holds the initcode generator and the SDK and endpoint-limit benchmarks.
 
 The project should stay small, auditable, and explicit. Prefer code that maps cleanly onto the underlying EVM and wire-format behavior.
 
@@ -20,7 +24,7 @@ Run all commands from the repository root.
 
 ```bash
 npm run build:contracts      # Build the Yul contract with Foundry and refresh generated SDK initcode
-npm run build:sdk            # Build contracts, refresh initcode, then typecheck
+npm run build:sdk            # Build contracts, refresh initcode, then compile the SDK to dist/
 npm run generate:sdk:initcode
 npm run check                # Lint and static checks with Biome
 npm run check:fix            # Auto-fix Biome issues where possible
@@ -37,7 +41,7 @@ npm run check:sdk:initcode   # Verify generated initcode is up to date
 - `src/Ghostcall.yul` is the source of truth for protocol semantics, payload parsing, result packing, and CREATE-return constraints.
 - `src/sdk/index.ts` owns the wire-format and batching APIs. Keep it provider-agnostic and keep raw calldata APIs available.
 - `src/sdk/abi.ts` connects ABI-described calls to the wire-format layer. Reuse ox's ABI encoding, decoding, and types rather than implementing a separate codec.
-- `scripts/generate-sdk-initcode.mjs` derives the bundled initcode from the Foundry artifact. Fix generation issues in the source or generator, not in the generated file.
+- `scripts/generate-sdk-initcode.ts` derives the bundled initcode from the Foundry artifact. Fix generation issues in the source or generator, not in the generated file.
 - `test/support/` contains RPC, Anvil, ABI, and artifact helpers for integration tests.
 - `README.md` documents the public protocol and SDK contract. If public semantics change, update it.
 
@@ -123,7 +127,7 @@ Tests in this repository are real execution tests, not abstract unit exercises.
 
 - Do not hand-edit `src/sdk/generated/initcode.ts`.
 - Treat generated output as derived state.
-- If the generated file changes unexpectedly, inspect `src/Ghostcall.yul`, Foundry artifacts, and `scripts/generate-sdk-initcode.mjs`.
+- If the generated file changes unexpectedly, inspect `src/Ghostcall.yul`, Foundry artifacts, and `scripts/generate-sdk-initcode.ts`.
 
 ## Common Patterns
 
@@ -138,7 +142,9 @@ Use runtime checks where data crosses an untyped boundary:
 - hex shape and prefix validation
 - address length validation
 - protocol size limits
-- truncated payload or response detection
+- truncated response detection
+
+The Yul program deliberately does not validate request payloads, which keeps the initcode small. The SDK is the request validation boundary: `encodeCalls()` must reject anything the program would misread, such as malformed hex, bad addresses, or oversized calldata.
 
 Do not add redundant runtime validation where TypeScript already proves the invariant and the missing check does not create a protocol or safety risk.
 
@@ -147,7 +153,7 @@ Do not add redundant runtime validation where TypeScript already proves the inva
 - Fail fast on malformed caller input.
 - Preserve deterministic behavior for batch ordering and packed output shape.
 - Bubble provider and transport failures unless extra context materially improves debugging.
-- Keep top-level protocol failure behavior intentional. If the Yul program reverts with empty data for malformed payloads or return-size overflow, preserve that behavior unless the protocol itself is being revised.
+- Keep top-level protocol failure behavior intentional. The Yul program reverts with empty data only for return-size overflow, which it alone can detect; preserve that unless the protocol itself is being revised.
 
 ## Security Considerations
 
@@ -156,7 +162,7 @@ Do not add redundant runtime validation where TypeScript already proves the inva
 ### Critical Safety Requirements
 
 1. Treat encoding, decoding, and ordering bugs as security-relevant correctness issues.
-2. Preserve fail-closed behavior for malformed input, truncated payloads, and return-size overflow.
+2. Preserve fail-closed behavior: the SDK rejects malformed input and truncated responses, and the Yul program reverts on return-size overflow.
 3. Treat wire-format limits as protocol constraints, not advisory suggestions.
 4. Keep bit packing, offsets, and size constants named and explained.
 5. Any change to public semantics must come with tests and documentation updates.

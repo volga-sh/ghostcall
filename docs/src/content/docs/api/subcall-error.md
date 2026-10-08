@@ -18,7 +18,7 @@ try {
 	]);
 } catch (error) {
 	if (!(error instanceof GhostcallSubcallError)) throw error;
-	console.log(error.index, error.call, error.result.returnData);
+	console.log(error.index, error.call, error.returnData);
 }
 ```
 
@@ -28,7 +28,7 @@ The error extends `Error` with three readonly properties:
 | --- | --- | --- |
 | `index` | `number` | Zero-based position of the failed call. |
 | `call` | `GhostcallCall` | The executed raw entry. ABI calls expose the target and prepared calldata. |
-| `result` | `Extract<GhostcallResult, { success: false }>` | The failed result, including any raw revert data in `returnData`. |
+| `returnData` | `Hex` | The raw revert data, or `0x` when the call reverted without data. |
 
 The outer request completed, but an inner call failed. Provider, transport,
 encoding, and decoding errors pass through with their original types.

@@ -66,18 +66,25 @@ type GhostcallAbiResult<TCall extends GhostcallAbiCall> =
  * Functions resolved within one batch, keyed by ABI object and function name.
  * `null` marks a name that must be resolved per call from its arguments.
  */
-type ResolvedAbiFunctions = Map<
-	Abi,
-	Map<string, AbiFunction.AbiFunction | null>
->;
+type SharedFunctions = Map<Abi, Map<string, AbiFunction.AbiFunction | null>>;
+
+/** Turn ABI calls into raw decoded calls; raw decoded calls pass through unchanged. */
+function prepareDecodedCalls(
+	calls: readonly (GhostcallAbiCall | GhostcallDecodedCall)[],
+): GhostcallDecodedCall[] {
+	const sharedFunctions: SharedFunctions = new Map();
+	return calls.map((call) =>
+		call.abi === undefined ? call : prepareAbiCall(call, sharedFunctions),
+	);
+}
 
 /** Bind encoding and decoding to the same resolved ABI function. */
 function prepareAbiCall(
 	call: GhostcallAbiCall,
-	resolvedFunctions: ResolvedAbiFunctions,
+	sharedFunctions: SharedFunctions,
 ): GhostcallDecodedCall {
 	const args = call.args ?? [];
-	const abiFunction = resolveAbiFunction(call, args, resolvedFunctions);
+	const abiFunction = resolveAbiFunction(call, args, sharedFunctions);
 
 	// ox permits selector-only encoding with no args. At this wire boundary,
 	// missing arguments must fail before RPC, including for dynamically loaded ABIs.
@@ -95,33 +102,30 @@ function prepareAbiCall(
 	};
 }
 
-// Each ox lookup hashes the function signature, so batches that repeat one
-// function resolve it once. ox ignores args when exactly one ABI item has the
-// name, of any item type. Other names resolve per call, by argument types.
+// Each ox lookup hashes the function signature, so a batch resolves each name
+// once when it can. ox ignores args when exactly one ABI item has the name, of
+// any item type. Other names resolve per call, by argument types.
 function resolveAbiFunction(
 	call: GhostcallAbiCall,
 	args: readonly unknown[],
-	resolvedFunctions: ResolvedAbiFunctions,
+	sharedFunctions: SharedFunctions,
 ): AbiFunction.AbiFunction {
-	let functions = resolvedFunctions.get(call.abi);
+	let functions = sharedFunctions.get(call.abi);
 	if (functions === undefined) {
 		functions = new Map();
-		resolvedFunctions.set(call.abi, functions);
+		sharedFunctions.set(call.abi, functions);
 	}
-	const resolved = functions.get(call.functionName);
-	if (resolved) return resolved;
-
-	const abiFunction = AbiFunction.fromAbi(call.abi, call.functionName, {
-		args,
-	});
-	if (resolved === undefined) {
-		const matches = call.abi.filter(
-			(item) => "name" in item && item.name === call.functionName,
-		);
-		functions.set(call.functionName, matches.length === 1 ? abiFunction : null);
+	let shared = functions.get(call.functionName);
+	if (shared === undefined) {
+		const isUnique =
+			call.abi.filter(
+				(item) => "name" in item && item.name === call.functionName,
+			).length === 1;
+		shared = isUnique ? AbiFunction.fromAbi(call.abi, call.functionName) : null;
+		functions.set(call.functionName, shared);
 	}
-	return abiFunction;
+	return shared ?? AbiFunction.fromAbi(call.abi, call.functionName, { args });
 }
 
-export type { GhostcallAbiCall, GhostcallAbiResult, ResolvedAbiFunctions };
-export { prepareAbiCall };
+export type { GhostcallAbiCall, GhostcallAbiResult };
+export { prepareDecodedCalls };

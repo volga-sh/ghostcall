@@ -50,9 +50,7 @@ data length.
 ## Returns
 
 ```ts
-type GhostcallResult =
-	| { success: true; returnData: Hex }
-	| { success: false; returnData: Hex };
+type GhostcallResult = { success: boolean; returnData: Hex };
 ```
 
 The array keeps the original call order. `decodeResults("0x")` returns an empty

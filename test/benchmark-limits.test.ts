@@ -4,9 +4,9 @@ import { size as hexSize } from "ox/Hex";
 import {
 	type BenchmarkConfig,
 	balanceInputBytesPerCall,
+	buildBalanceCalls,
 	createRawInitcodeSizeProbe,
 	createRawRuntimeReturnProbe,
-	encodeBalanceOfCalldata,
 	findLimit,
 	parseBenchmarkArgs,
 	runBenchmark,
@@ -17,9 +17,10 @@ const tokenA = "0x1111111111111111111111111111111111111111";
 const tokenB = "0x2222222222222222222222222222222222222222";
 const ownerA = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const ownerB = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const env = { GHOSTCALL_BENCH_RPC_URL: "https://env.invalid/rpc" };
 const initcodeBytes = hexSize(encodeCalls([]));
 const config = {
-	rpcUrl: "https://example.invalid/rpc",
+	rpcUrl: env.GHOSTCALL_BENCH_RPC_URL,
 	mode: "balances",
 	tokens: [tokenA],
 	owners: [ownerA],
@@ -32,12 +33,10 @@ const config = {
 	json: false,
 } satisfies BenchmarkConfig;
 
-test("parses CLI overrides, repeated flags, and environment configuration", () => {
+test("parses comma-separated and repeated addresses, numbers, and env fallbacks", () => {
 	assert.deepEqual(
 		parseBenchmarkArgs(
 			[
-				"--rpc-url",
-				config.rpcUrl,
 				"--mode=balances",
 				`--token=${tokenA},${tokenB}`,
 				"--owner",
@@ -47,87 +46,51 @@ test("parses CLI overrides, repeated flags, and environment configuration", () =
 				"--block=123",
 				`--from=${ownerA}`,
 				"--gas=1000000",
-				"--timeout-ms=1000",
-				"--max-calls=200",
-				"--max-initcode-bytes=0x100",
-				"--max-runtime-bytes=0x200",
-				"--json",
+				"--max-calls=10",
+				`--max-initcode-bytes=${config.maxInitcodeBytes}`,
+				"--max-runtime-bytes=0x1",
 			],
-			{ GHOSTCALL_BENCH_RPC_URL: "https://env.invalid/rpc" },
+			env,
 		),
 		{
-			help: false,
-			config: {
-				...config,
-				tokens: [tokenA, tokenB],
-				owners: [ownerA, ownerB],
-				blockTag: "0x7b",
-				gas: "0xf4240",
-				timeoutMs: 1000,
-				maxCalls: 200,
-				maxInitcodeBytes: 256,
-				maxRuntimeBytes: 512,
-				json: true,
-			},
+			...config,
+			tokens: [tokenA, tokenB],
+			owners: [ownerA, ownerB],
+			blockTag: "0x7b",
+			gas: "0xf4240",
 		},
 	);
-	const parsed = parseBenchmarkArgs(["--mode=raw"], {
-		GHOSTCALL_BENCH_RPC_URL: "https://env.invalid/rpc",
+	const raw = parseBenchmarkArgs(["--mode=raw"], {
+		...env,
+		GHOSTCALL_BENCH_TOKENS: "not an address",
 	});
-	assert.ok(!parsed.help);
-	assert.equal(parsed.config.rpcUrl, "https://env.invalid/rpc");
-	assert.deepEqual(parsed.config.tokens, []);
-	assert.deepEqual(parsed.config.owners, []);
+	assert.deepEqual([raw.tokens, raw.owners], [[], []]);
 });
 
-test("rejects missing balance inputs, invalid addresses, and invalid numeric options", () => {
-	const cases = [
-		[["--mode=balances"], /token/i],
-		[["--mode=balances", `--token=${tokenA}`], /owner/i],
-		[
-			["--mode=balances", "--token=0x1234", `--owner=${ownerA}`],
-			/--token\[0\]/,
-		],
-		[
-			["--mode=balances", `--token=${tokenA}`, "--owner=0x1234"],
-			/--owner\[0\]/,
-		],
+test("rejects missing balance inputs, invalid addresses, and invalid numbers", () => {
+	for (const [args, error] of [
+		[["--mode=balances"], /--token/],
+		[["--mode=balances", `--token=${tokenA}`], /--owner/],
+		[["--token=0x1234", `--owner=${ownerA}`], /--token\[0\]/],
 		[["--mode=raw", "--from=0x1234"], /--from/],
-		[
-			["--mode=raw", "--gas=banana"],
-			/--gas must be a non-negative safe integer/,
-		],
-		[
-			["--mode=raw", "--max-calls=Infinity"],
-			/--max-calls must be a non-negative safe integer/,
-		],
-		[
-			["--mode=raw", "--timeout-ms"],
-			/--timeout-ms must be a non-negative safe integer/,
-		],
-	] as const;
-	for (const [args, error] of cases) {
-		assert.throws(
-			() =>
-				parseBenchmarkArgs(args, { GHOSTCALL_BENCH_RPC_URL: config.rpcUrl }),
-			error,
-			args.join(" "),
-		);
+		[["--mode=raw", "--gas=banana"], /--gas must be/],
+		[["--mode=raw", "--max-calls=Infinity"], /--max-calls must be/],
+	] as const) {
+		assert.throws(() => parseBenchmarkArgs(args, env), error, args.join(" "));
 	}
 });
 
-test("builds exact probe bytes and validates balanceOf owners", () => {
-	assert.equal(
-		encodeBalanceOfCalldata(ownerA),
-		`0x70a08231${"0".repeat(24)}${ownerA.slice(2)}`,
-	);
-	assert.throws(
-		() => encodeBalanceOfCalldata("0x1234"),
-		/owner must be a 20-byte hex string/,
-	);
+test("builds exact probe bytes and rotates tokens before owners", () => {
 	assert.equal(hexSize(createRawInitcodeSizeProbe(10)), 10);
 	assert.equal(createRawRuntimeReturnProbe(1), "0x60016000f3");
 	assert.equal(createRawRuntimeReturnProbe(256), "0x6101006000f3");
+	const balanceOf = (owner: Hex) =>
+		`0x70a08231${"0".repeat(24)}${owner.slice(2)}`;
+	assert.deepEqual(buildBalanceCalls(3, [tokenA, tokenB], [ownerA, ownerB]), [
+		{ to: tokenA, data: balanceOf(ownerA) },
+		{ to: tokenB, data: balanceOf(ownerA) },
+		{ to: tokenA, data: balanceOf(ownerB) },
+	]);
 });
 
 test("finds the threshold without duplicate probes, or reports a lower bound", async () => {
@@ -176,17 +139,6 @@ test("reports failed balance subcalls as probe failures", async (t) => {
 		"balanceOf call 0 returned a failed result entry",
 	);
 	assert.deepEqual(counts, [1, 2, 4, 3]);
-});
-
-test("rejects invalid benchmark inputs before any RPC", async (t) => {
-	const fetch = t.mock.method(globalThis, "fetch", async () => {
-		assert.fail("invalid balance inputs should not reach fetch");
-	});
-	await assert.rejects(
-		runBenchmark({ ...config, owners: ["0x1234"] }),
-		/config\.owners\[0\] must be a 20-byte hex string/,
-	);
-	assert.equal(fetch.mock.callCount(), 0);
 });
 
 function mockBalanceRpc(

@@ -30,9 +30,7 @@ const results = await aggregateCalls(client, [
 
 ```ts
 async function aggregateCalls(
-	provider: {
-		request(args: { method: string; params?: unknown }): Promise<unknown>;
-	},
+	provider: GhostcallProvider,
 	calls: readonly GhostcallCall[],
 	options?: GhostcallAggregateOptions,
 ): Promise<GhostcallResult[]>;
@@ -41,6 +39,12 @@ async function aggregateCalls(
 ## Parameters
 
 ### provider
+
+```ts
+type GhostcallProvider = {
+	request(args: { method: string; params?: unknown }): Promise<unknown>;
+};
+```
 
 A provider with a compatible `request` method, such as a viem client or ox transport.
 
@@ -69,21 +73,20 @@ type GhostcallAggregateOptions = {
 	maxInitcodeBytes?: number;
 	ethCall?: {
 		from?: Hex;
-		gas?: Hex;
-		blockTag?: string | number | bigint;
+		gas?: bigint;
+		blockTag?: bigint | "latest" | "earliest" | "pending" | "safe" | "finalized";
 	};
 };
 ```
 
-`blockTag` defaults to `"latest"`. Decimal block numbers are converted to RPC
-hex quantities. `maxInitcodeBytes` defaults to `49,152`.
+`blockTag` takes a block number or a named tag and defaults to `"latest"`. Block
+numbers and `gas` are sent as RPC hex quantities. `maxInitcodeBytes` defaults to
+`49,152`.
 
 ## Returns
 
 ```ts
-type GhostcallResult =
-	| { success: true; returnData: Hex }
-	| { success: false; returnData: Hex };
+type GhostcallResult = { success: boolean; returnData: Hex };
 ```
 
 The promise resolves to one result per call, in the same order.

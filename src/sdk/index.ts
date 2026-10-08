@@ -4,8 +4,7 @@ import { size as hexSize, validate as isHex } from "ox/Hex";
 import {
 	type GhostcallAbiCall,
 	type GhostcallAbiResult,
-	prepareAbiCall,
-	type ResolvedAbiFunctions,
+	prepareDecodedCalls,
 } from "./abi.ts";
 import { ghostcallInitcode } from "./generated/initcode.ts";
 
@@ -21,25 +20,21 @@ type GhostcallCall = {
 	allowFailure?: boolean;
 };
 
-/** Raw calldata with a decoder that only receives successful results. */
-type GhostcallDecodedCall<TResult = unknown> = GhostcallCall & {
+/** Raw calldata with a decoder that only receives successful return data. */
+type GhostcallDecodedCall<TResult = unknown> = {
+	to: Hex;
+	/** At most 65,535 bytes (the wire format stores a uint16 length). */
+	data: Hex;
+	decodeResult: (returnData: Hex, index: number) => TResult;
 	abi?: never;
 	functionName?: never;
 	args?: never;
 	allowFailure?: never;
-	decodeResult: (
-		returnData: Hex,
-		entry: Extract<GhostcallResult, { success: true }>,
-		index: number,
-	) => TResult;
 };
 
-/** Raw results retain input order and include revert data for failed calls. */
-type GhostcallResult =
-	| { success: true; returnData: Hex }
-	| { success: false; returnData: Hex };
+/** One subcall result. Failed calls carry their revert data in returnData. */
+type GhostcallResult = { success: boolean; returnData: Hex };
 
-type GhostcallFailedResult = Extract<GhostcallResult, { success: false }>;
 type GhostcallDecodedInput = GhostcallAbiCall | GhostcallDecodedCall;
 
 // Distribute over mixed call unions while retaining each tuple position.
@@ -71,14 +66,20 @@ type GhostcallAggregateOptions = GhostcallEncodeOptions & {
 	/** Controls the outer eth_call, shared by the entire batch. */
 	ethCall?: {
 		from?: Hex;
-		/** Canonical RPC hex quantity. */
-		gas?: Hex;
-		/** Decimal block numbers are normalized to hex. Default: "latest". */
-		blockTag?: string | number | bigint;
+		gas?: bigint;
+		/** A block number or named tag. Default: "latest". */
+		blockTag?:
+			| bigint
+			| "latest"
+			| "earliest"
+			| "pending"
+			| "safe"
+			| "finalized";
 	};
 };
 
-type Provider = {
+/** A provider with an EIP-1193-style request method, such as a viem client or ox transport. */
+type GhostcallProvider = {
 	request(args: { method: string; params?: unknown }): Promise<unknown>;
 };
 
@@ -86,28 +87,35 @@ type Provider = {
 class GhostcallSubcallError extends Error {
 	readonly index: number;
 	readonly call: GhostcallCall;
-	readonly result: GhostcallFailedResult;
+	readonly returnData: Hex;
 
-	constructor(
-		index: number,
-		call: GhostcallCall,
-		result: GhostcallFailedResult,
-	) {
-		super(`Ghostcall subcall ${index} failed`);
+	constructor(index: number, call: GhostcallCall, returnData: Hex) {
+		super(`ghostcall subcall ${index} failed`);
 		this.name = "GhostcallSubcallError";
 		this.index = index;
 		this.call = call;
-		this.result = result;
+		this.returnData = returnData;
 	}
 }
 
-const encodedCallHeaderSize = 22;
-const encodedHeaderHexLength = 4;
+// Request entries: [uint16 calldata length][20-byte target][calldata].
+const callHeaderSize = 22;
+const calldataLengthHexChars = 4;
 const maxCalldataSize = 0xffff;
-const defaultMaxCreateInitcodeSize = 0xc000;
-const successFlagMask = 0x8000;
+// Result entries: [success bit | uint15 returndata length][returndata].
+const resultHeaderHexChars = 4;
+const successFlag = 0x8000;
 const returnDataLengthMask = 0x7fff;
+// EIP-3860 initcode limit.
+const defaultMaxInitcodeBytes = 0xc000;
 const bundledInitcodeSize = hexSize(ghostcallInitcode);
+const blockTagNames = new Set([
+	"latest",
+	"earliest",
+	"pending",
+	"safe",
+	"finalized",
+]);
 
 /**
  * Build CREATE-style eth_call data: initcode followed by [length (2)][target (20)][data].
@@ -115,9 +123,7 @@ const bundledInitcodeSize = hexSize(ghostcallInitcode);
  */
 function encodeCalls(
 	calls: readonly GhostcallCall[],
-	{
-		maxInitcodeBytes = defaultMaxCreateInitcodeSize,
-	}: GhostcallEncodeOptions = {},
+	{ maxInitcodeBytes = defaultMaxInitcodeBytes }: GhostcallEncodeOptions = {},
 ): Hex {
 	if (!Number.isSafeInteger(maxInitcodeBytes) || maxInitcodeBytes < 0) {
 		throw new TypeError(
@@ -126,12 +132,12 @@ function encodeCalls(
 	}
 	let encodedData: Hex = ghostcallInitcode;
 	let totalEncodedSize = bundledInitcodeSize;
-	const sizeError = `encoded Ghostcall initcode exceeds the ${maxInitcodeBytes}-byte CREATE initcode limit`;
+	const sizeError = `encoded ghostcall initcode exceeds the ${maxInitcodeBytes}-byte CREATE initcode limit`;
 	if (totalEncodedSize > maxInitcodeBytes) throw new RangeError(sizeError);
 
 	let index = 0;
 	for (const call of calls) {
-		assertAddress(call.to, `calls[${index}].to`);
+		const to = assertAddress(call.to, `calls[${index}].to`);
 		const calldata = assertHex(call.data, `calls[${index}].data`);
 		const calldataSize = hexSize(calldata);
 		if (calldataSize > maxCalldataSize) {
@@ -139,12 +145,12 @@ function encodeCalls(
 				`calls[${index}].data exceeds the ${maxCalldataSize}-byte calldata limit`,
 			);
 		}
-		totalEncodedSize += encodedCallHeaderSize + calldataSize;
+		totalEncodedSize += callHeaderSize + calldataSize;
 		if (totalEncodedSize > maxInitcodeBytes) throw new RangeError(sizeError);
 		const header = calldataSize
 			.toString(16)
-			.padStart(encodedHeaderHexLength, "0");
-		encodedData = `${encodedData}${header}${call.to.slice(2)}${calldata.slice(2)}`;
+			.padStart(calldataLengthHexChars, "0");
+		encodedData = `${encodedData}${header}${to.slice(2)}${calldata.slice(2)}`;
 		index += 1;
 	}
 	return encodedData;
@@ -155,40 +161,20 @@ function encodeCalls(
  * their entry sets allowFailure. Provider errors pass through unchanged.
  */
 async function aggregateCalls(
-	provider: Provider,
+	provider: GhostcallProvider,
 	calls: readonly GhostcallCall[],
 	options?: GhostcallAggregateOptions,
 ): Promise<GhostcallResult[]> {
-	const { from, gas, blockTag } = options?.ethCall ?? {};
-	const ethCall: { data: Hex; from?: Hex; gas?: Hex } = {
-		data: encodeCalls(calls, options ?? {}),
-	};
-	if (from !== undefined) {
-		assertAddress(from, "options.ethCall.from");
-		ethCall.from = from;
-	}
-	if (gas !== undefined)
-		ethCall.gas = assertHexQuantity(gas, "options.ethCall.gas");
-
-	const result = await provider.request({
-		method: "eth_call",
-		params: [ethCall, normalizeBlockTag(blockTag ?? "latest")],
-	});
-	const entries = decodeValidatedResults(assertHex(result, "eth_call result"));
-	if (entries.length !== calls.length) {
-		throw new Error(
-			`Ghostcall returned ${entries.length} result entries for ${calls.length} calls`,
-		);
-	}
+	const results = await executeCalls(provider, calls, options);
 	let index = 0;
-	for (const entry of entries) {
+	for (const result of results) {
 		const call = calls[index] as GhostcallCall;
-		if (!entry.success && call.allowFailure !== true) {
-			throw new GhostcallSubcallError(index, call, entry);
+		if (!result.success && call.allowFailure !== true) {
+			throw new GhostcallSubcallError(index, call, result.returnData);
 		}
 		index += 1;
 	}
-	return entries;
+	return results;
 }
 
 /**
@@ -199,21 +185,16 @@ async function aggregateCalls(
 async function aggregateDecodedCalls<
 	const TCalls extends readonly GhostcallDecodedInput[],
 >(
-	provider: Provider,
+	provider: GhostcallProvider,
 	calls: TCalls & NoInfer<ValidatedDecodedCalls<TCalls>>,
 	options?: GhostcallAggregateOptions,
 ): Promise<GhostcallDecodedResults<TCalls>> {
-	const resolvedFunctions: ResolvedAbiFunctions = new Map();
-	const preparedCalls = calls.map((call) =>
-		call.abi === undefined ? call : prepareAbiCall(call, resolvedFunctions),
-	);
-	const entries = await aggregateCalls(provider, preparedCalls, options);
-	return entries.map((entry, index) => {
-		// aggregateCalls has checked the count. Hidden allowFailure fields still cannot
-		// bypass this guard and send failed returndata to a success-only decoder.
+	const preparedCalls = prepareDecodedCalls(calls);
+	const results = await executeCalls(provider, preparedCalls, options);
+	return results.map(({ success, returnData }, index) => {
 		const call = preparedCalls[index] as GhostcallDecodedCall;
-		if (!entry.success) throw new GhostcallSubcallError(index, call, entry);
-		return call.decodeResult(entry.returnData, entry, index);
+		if (!success) throw new GhostcallSubcallError(index, call, returnData);
+		return call.decodeResult(returnData, index);
 	}) as GhostcallDecodedResults<TCalls>;
 }
 
@@ -222,25 +203,57 @@ function decodeResults(data: Hex): GhostcallResult[] {
 	return decodeValidatedResults(assertHex(data, "data"));
 }
 
+/** Send one eth_call and return one result per call, without applying a failure policy. */
+async function executeCalls(
+	provider: GhostcallProvider,
+	calls: readonly GhostcallCall[],
+	options: GhostcallAggregateOptions = {},
+): Promise<GhostcallResult[]> {
+	const { from, gas, blockTag = "latest" } = options.ethCall ?? {};
+	const ethCall: { data: Hex; from?: Hex; gas?: Hex } = {
+		data: encodeCalls(calls, options),
+	};
+	if (from !== undefined) {
+		ethCall.from = assertAddress(from, "options.ethCall.from");
+	}
+	if (gas !== undefined) {
+		ethCall.gas = toQuantity(gas, "options.ethCall.gas");
+	}
+
+	const response = await provider.request({
+		method: "eth_call",
+		params: [ethCall, normalizeBlockTag(blockTag)],
+	});
+	const results = decodeValidatedResults(
+		assertHex(response, "eth_call result"),
+	);
+	if (results.length !== calls.length) {
+		throw new Error(
+			`ghostcall returned ${results.length} result entries for ${calls.length} calls`,
+		);
+	}
+	return results;
+}
+
 /** Parse only after the public API or RPC boundary has validated the entire hex string. */
 function decodeValidatedResults(data: Hex): GhostcallResult[] {
 	const results: GhostcallResult[] = [];
 	let cursor = 2;
 	while (cursor < data.length) {
-		if (cursor + encodedHeaderHexLength > data.length) {
-			throw new TypeError("Truncated Ghostcall response header");
+		if (cursor + resultHeaderHexChars > data.length) {
+			throw new TypeError("Truncated ghostcall response header");
 		}
 		const header = Number.parseInt(
-			data.slice(cursor, cursor + encodedHeaderHexLength),
+			data.slice(cursor, cursor + resultHeaderHexChars),
 			16,
 		);
-		cursor += encodedHeaderHexLength;
+		cursor += resultHeaderHexChars;
 		const returnDataEnd = cursor + (header & returnDataLengthMask) * 2;
 		if (returnDataEnd > data.length) {
-			throw new TypeError("Truncated Ghostcall response body");
+			throw new TypeError("Truncated ghostcall response body");
 		}
 		results.push({
-			success: (header & successFlagMask) !== 0,
+			success: (header & successFlag) !== 0,
 			returnData: `0x${data.slice(cursor, returnDataEnd)}`,
 		});
 		cursor = returnDataEnd;
@@ -248,10 +261,11 @@ function decodeValidatedResults(data: Hex): GhostcallResult[] {
 	return results;
 }
 
-function assertAddress(value: unknown, label: string): asserts value is Hex {
+function assertAddress(value: unknown, label: string): Hex {
 	if (typeof value !== "string" || !isAddress(value, { strict: false })) {
 		throw new TypeError(`${label} must be a 20-byte hex string`);
 	}
+	return value;
 }
 
 function assertHex(value: unknown, label: string): Hex {
@@ -264,34 +278,19 @@ function assertHex(value: unknown, label: string): Hex {
 	return value;
 }
 
-function assertHexQuantity(value: unknown, label: string): Hex {
-	if (
-		typeof value !== "string" ||
-		!/^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/.test(value)
-	) {
-		throw new TypeError(`${label} must be a 0x-prefixed hex quantity`);
+function toQuantity(value: unknown, label: string): Hex {
+	if (typeof value !== "bigint" || value < 0n) {
+		throw new TypeError(`${label} must be a non-negative bigint`);
 	}
-	return value as Hex;
+	return `0x${value.toString(16)}`;
 }
 
 function normalizeBlockTag(value: unknown): string {
-	if (
-		typeof value === "bigint" ||
-		(typeof value === "number" && Number.isSafeInteger(value))
-	) {
-		if (value >= 0) return `0x${value.toString(16)}`;
-	} else if (
-		typeof value === "string" &&
-		value.length > 0 &&
-		!/^-\d+$/.test(value)
-	) {
-		if (/^\d+$/.test(value)) return `0x${BigInt(value).toString(16)}`;
-		return /^0x/i.test(value)
-			? assertHexQuantity(`0x${value.slice(2)}`, "options.ethCall.blockTag")
-			: value;
-	}
+	if (typeof value === "string" && blockTagNames.has(value)) return value;
+	if (typeof value === "bigint" && value >= 0n)
+		return `0x${value.toString(16)}`;
 	throw new TypeError(
-		"options.ethCall.blockTag must be a non-negative safe integer, bigint, or non-empty string",
+		`options.ethCall.blockTag must be a non-negative bigint or one of: ${[...blockTagNames].join(", ")}`,
 	);
 }
 
@@ -301,6 +300,7 @@ export type {
 	GhostcallCall,
 	GhostcallDecodedCall,
 	GhostcallEncodeOptions,
+	GhostcallProvider,
 	GhostcallResult,
 	Hex,
 };
