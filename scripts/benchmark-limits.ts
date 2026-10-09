@@ -5,6 +5,7 @@ import { RpcTransport } from "ox";
 import { validate as isAddress } from "ox/Address";
 import { size as hexSize } from "ox/Hex";
 
+import { ghostcallInitcode } from "../src/sdk/generated/initcode.ts";
 import {
 	decodeResults,
 	encodeCalls,
@@ -290,7 +291,7 @@ async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
 	// Fail fast on an unreachable endpoint before running any probes.
 	const chainId = await rpc("eth_chainId", []);
 	const latestBlock = await rpc("eth_blockNumber", []);
-	const ghostcallInitcodeBytes = hexSize(encodeCalls([]));
+	const ghostcallInitcodeBytes = hexSize(ghostcallInitcode);
 	const runsRaw = config.mode !== "balances";
 	const rawInitcode = runsRaw
 		? await findLimit(

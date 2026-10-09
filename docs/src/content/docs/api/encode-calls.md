@@ -3,10 +3,10 @@ title: encodeCalls
 description: Build the data for a ghostcall eth_call request.
 ---
 
-`encodeCalls()` returns the ghostcall program followed by the encoded calls.
-Send it as the `data` of an `eth_call` without a `to` address, then parse the
-response with [`decodeResults()`](/api/decode-results/). Use this pair when the
-application sends the RPC request itself.
+`encodeCalls()` returns the ghostcall program, then the encoded calls. Send the
+result as the `data` of an `eth_call` without a `to` address. Then decode the
+response with [`decodeResults()`](/api/decode-results/). Use these two functions
+if your application sends the RPC request.
 
 ## Usage
 
@@ -47,16 +47,19 @@ import { encodeCalls } from "@volga-sh/evm-ghostcall";
 //       ^?
 ```
 
-See [Types](/api/types/) for each type and [Protocol](/protocol/#request-bytes)
-for the byte layout.
+For each type, refer to [Types](/api/types/). For the byte layout, refer to
+[Protocol](/protocol/#request-bytes).
 
-- Each `to` must be a 20-byte address. Each `data` must be even-length,
-  `0x`-prefixed hex of at most `65,535` bytes. `allowFailure` is ignored.
-- `maxInitcodeBytes` caps the complete request and defaults to `49,152`.
-- An empty call list is valid and returns only the ghostcall program.
+- Each `to` must be a 20-byte address. Each `data` must be hex with an even
+  length and a `0x` prefix. The maximum size of `data` is `65,535` bytes.
+  `encodeCalls()` does not use `allowFailure`.
+- `maxInitcodeBytes` sets the maximum size of the full request. The default is
+  `49,152`.
+- `calls` must contain one or more calls.
 
 ## Throws
 
-- `TypeError` for an invalid address or hex value.
-- `RangeError` when one call contains more than `65,535` bytes of calldata, or
-  the complete request exceeds `maxInitcodeBytes`.
+- `TypeError` for an incorrect address or hex value.
+- `RangeError` if `calls` is empty.
+- `RangeError` if one call has more than `65,535` bytes of calldata, or if the
+  full request is larger than `maxInitcodeBytes`.

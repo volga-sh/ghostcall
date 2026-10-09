@@ -4,8 +4,8 @@ description: Send a batch and return raw success or failure results.
 ---
 
 `aggregateCalls()` sends one `eth_call` and returns one
-[`GhostcallResult`](/api/types/) per call, in call order. Use it when success
-flags or revert data are needed, or when selected calls may fail.
+[`GhostcallResult`](/api/types/) for each call, in the call order. Use it to get
+the success flags or the revert data. Also use it if a call can revert.
 
 ## Usage
 
@@ -17,7 +17,7 @@ const weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const results = await aggregateCalls(client, [
 	// totalSupply()
 	{ to: weth, data: "0x18160ddd" },
-	// If this call reverts, it returns success: false instead of throwing.
+	// If this call reverts, its result has success: false. No error occurs.
 	{ to: weth, data: "0xdeadbeef", allowFailure: true },
 ]);
 
@@ -31,20 +31,23 @@ import { aggregateCalls } from "@volga-sh/evm-ghostcall";
 //       ^?
 ```
 
-See [Types](/api/types/) for each type.
+For each type, refer to [Types](/api/types/).
 
-- `provider` needs a compatible `request` method, such as a viem client or an ox
-  transport.
-- `calls` run in order. Set `allowFailure: true` to return that entry with
-  `success: false` instead of throwing. The SDK applies it after the response
-  arrives; it is not sent to the EVM.
-- `options` apply to the whole batch. `maxInitcodeBytes` defaults to `49,152`.
+- `provider` must have a compatible `request` method, for example a viem client
+  or an ox transport.
+- The calls execute in order. To get a result with `success: false` and no
+  error, set `allowFailure: true` for that call. The SDK uses this setting after
+  it gets the response. The SDK does not send it to the EVM.
+- `options` are for the full batch. The default for `maxInitcodeBytes` is
+  `49,152`.
+- For an empty list of calls, the function returns `[]`. It does not send an RPC
+  request.
 
 ## Block, sender, and gas
 
-`ethCall` sets the outer `eth_call`. `blockTag` takes a `bigint` block number or
-a named tag and defaults to `"latest"`. Omitted `from` and `gas` use provider
-defaults.
+`ethCall` sets the outer `eth_call`. `blockTag` is a `bigint` block number or a
+named tag. The default is `"latest"`. If you do not set `from` or `gas`, the
+provider uses its default values.
 
 ```ts twoslash
 import { aggregateCalls } from "@volga-sh/evm-ghostcall";
@@ -61,14 +64,14 @@ const [result] = await aggregateCalls(client, [{ to: weth, data: "0x18160ddd" }]
 
 ## Throws
 
-- `TypeError` for invalid addresses, hex data, or provider responses.
-- `RangeError` when one call or the full request exceeds its size limit.
-- [`GhostcallSubcallError`](/api/subcall-error/) when a call fails without
-  `allowFailure: true`.
-- `Error` when the response contains a different number of results than the
-  request.
+- `TypeError` for incorrect addresses, hex data, or provider responses.
+- `RangeError` if one call or the full request is larger than its size limit.
+- [`GhostcallSubcallError`](/api/subcall-error/) if a call has `success: false`
+  and does not set `allowFailure: true`.
+- `Error` if the number of results in the response is different from the number
+  of calls.
 
-Provider and transport errors pass through unchanged.
+The function does not change provider errors and transport errors.
 
-Use [`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/) when every call
-must succeed and decoded values are needed.
+To get decoded values, and an error for each call with `success: false`, use
+[`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/).

@@ -3,9 +3,9 @@
 		<div
 			class="byte-layout request-layout"
 			role="img"
-			aria-label="Request layout: 91-byte ghostcall initcode followed by repeated calldata length, target address, and calldata fields."
+			aria-label="Request layout: 61-byte ghostcall initcode followed by repeated calldata length, target address, and calldata fields."
 		>
-			<span class="field field-program">91-byte program</span>
+			<span class="field field-program">61-byte program</span>
 			<span class="field field-length">len · 2</span>
 			<span class="field field-target">target · 20</span>
 			<span class="field field-data">calldata · N</span>
@@ -18,9 +18,9 @@
 		<div
 			class="byte-layout response-layout"
 			role="img"
-			aria-label="Response layout: repeated packed success and return-data length header followed by return data."
+			aria-label="Response layout: repeated packed return-data length and success header followed by return data."
 		>
-			<span class="field field-header">success + len · 2</span>
+			<span class="field field-header">len + success · 2</span>
 			<span class="field field-return">return data · N</span>
 			<span class="field field-repeat">…</span>
 		</div>

@@ -145,7 +145,7 @@ Use runtime checks only where types cannot express the constraint:
 - protocol size limits
 - truncated response detection
 
-The Yul program deliberately does not validate request payloads, which keeps the initcode small. The SDK is the request validation boundary: `encodeCalls()` must reject anything the program would misread, such as malformed hex, bad addresses, or oversized calldata.
+The Yul program does not do a check of the request bytes. This keeps the initcode small. The SDK does the check of each request: `encodeCalls()` must throw for each input that the program cannot read correctly. Examples are incorrect hex, incorrect addresses, calldata that is too large, and an empty list of calls.
 
 Do not add runtime validation for anything the types already express.
 
@@ -154,7 +154,7 @@ Do not add runtime validation for anything the types already express.
 - Fail fast on malformed caller input.
 - Preserve deterministic behavior for batch ordering and packed output shape.
 - Bubble provider and transport failures unless extra context materially improves debugging.
-- Keep top-level protocol failure behavior intentional. The Yul program reverts with empty data only for return-size overflow, which it alone can detect; preserve that unless the protocol itself is being revised.
+- Keep the protocol failure behavior intentional. The Yul program stops the full call only if a return size is too large for the header. Only the program can find this condition. It stops with an exceptional halt and no data. Keep this behavior, but not if you change the protocol.
 
 ## Security Considerations
 
@@ -163,7 +163,7 @@ Do not add runtime validation for anything the types already express.
 ### Critical Safety Requirements
 
 1. Treat encoding, decoding, and ordering bugs as security-relevant correctness issues.
-2. Preserve fail-closed behavior: the SDK rejects malformed input and truncated responses, and the Yul program reverts on return-size overflow.
+2. Preserve fail-closed behavior: the SDK rejects malformed input and truncated responses, and the Yul program stops with an exceptional halt if a return size is too large.
 3. Treat wire-format limits as protocol constraints, not advisory suggestions.
 4. Keep bit packing, offsets, and size constants named and explained.
 5. Any change to public semantics must come with tests and documentation updates.
