@@ -140,7 +140,6 @@ function encodeCalls(
 	let encodedData: Hex = ghostcallInitcode;
 	let totalEncodedSize = bundledInitcodeSize;
 	const sizeError = `encoded ghostcall initcode exceeds the ${maxInitcodeBytes}-byte CREATE initcode limit`;
-	if (totalEncodedSize > maxInitcodeBytes) throw new RangeError(sizeError);
 
 	// A for...of loop makes the string concatenation fast. Refer to benchmark:sdk.
 	let index = 0;
@@ -221,8 +220,8 @@ async function executeCalls(
 	calls: readonly GhostcallCall[],
 	options: GhostcallAggregateOptions = {},
 ): Promise<GhostcallResult[]> {
-	// The program must have one or more entries. An empty batch has no results.
-	// Thus the SDK sends no request.
+	// An empty batch has no results. Thus the SDK sends no request, and
+	// encodeCalls() does not throw.
 	if (calls.length === 0) return [];
 	const { from, gas, blockTag = "latest" } = options.ethCall ?? {};
 	const ethCall = {

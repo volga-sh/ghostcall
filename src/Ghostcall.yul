@@ -18,9 +18,8 @@ object "Ghostcall" {
         //   header = returndata length * 2 + success bit
         //
         // The SDK does a check of each request before it sends the request.
-        // This program does not do a check of the entries. The request must
-        // contain one or more entries. The result of a bad request is not
-        // defined.
+        // This program does not do a check of the entries. The result of a bad
+        // request is not defined.
         //
         // Memory layout in the loop:
         //

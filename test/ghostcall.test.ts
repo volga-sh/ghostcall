@@ -9,7 +9,21 @@ import {
 	GhostcallSubcallError,
 	type Hex,
 } from "../src/sdk/index.ts";
+import type { Transport } from "./support/anvil.ts";
 import { setupMock } from "./support/mock.ts";
+
+/** Send raw ghostcall data. The eth_call must stop with an error and no revert data. */
+async function assertCallFailsWithoutData(
+	transport: Transport,
+	data: Hex,
+): Promise<void> {
+	const response = await transport.request(
+		{ method: "eth_call", params: [{ data }, "latest"] },
+		{ raw: true },
+	);
+	assert.ok(response.error, "expected the eth_call to fail");
+	assert.equal(response.error.data, undefined);
+}
 
 test("ghostcall integration", async (t) => {
 	const { transport, to, write } = await setupMock(t);
@@ -46,12 +60,7 @@ test("ghostcall integration", async (t) => {
 	await t.test("stops a request with no entries with an error", async () => {
 		// The program calls the first entry before it does the end check. With no
 		// entries, the return size is not correct, and the eth_call stops.
-		const response = await transport.request(
-			{ method: "eth_call", params: [{ data: ghostcallInitcode }, "latest"] },
-			{ raw: true },
-		);
-		assert.ok(response.error, "expected the eth_call to fail");
-		assert.equal(response.error.data, undefined);
+		await assertCallFailsWithoutData(transport, ghostcallInitcode);
 	});
 
 	await t.test(
@@ -142,17 +151,9 @@ test("packs entries up to the uint15 header and fails the whole call without dat
 		["0x33333333", "0x22222222"],
 		["0x22222222", "0x33333333"],
 	] as const) {
-		const response = await transport.request(
-			{
-				method: "eth_call",
-				params: [
-					{ data: encodeCalls(order.map((data) => ({ to, data }))) },
-					"latest",
-				],
-			},
-			{ raw: true },
+		await assertCallFailsWithoutData(
+			transport,
+			encodeCalls(order.map((data) => ({ to, data }))),
 		);
-		assert.ok(response.error, "expected the eth_call to fail");
-		assert.equal(response.error.data, undefined);
 	}
 });
