@@ -3,7 +3,6 @@ title: Development
 description: Instructions for changes to the ghostcall repository.
 ---
 
-This page gives instructions for work in the ghostcall repository.
 Run each command from the repository root.
 
 Use the Node.js LTS version in `.nvmrc`.
@@ -97,21 +96,6 @@ It does not build this binary during installation.
 Do a check of the esbuild approval after a version change.
 Update the approval if necessary.
 
-## Repository files
-
-- `src/Ghostcall.yul` contains the EVM program.
-- `src/sdk/index.ts` contains the public TypeScript API.
-- `src/sdk/abi.ts` prepares raw calls and decoders from ABI calls.
-- `scripts/generate-sdk-initcode.ts` copies compiled initcode into the SDK.
-- `scripts/benchmark-sdk.ts` and `scripts/benchmark-limits.ts` measure SDK processing time and endpoint size limits.
-- `test/ghostcall.test.ts` contains the tests for program behavior with Anvil.
-- `test/sdk.test.ts` contains the tests for encoding, decoding, validation, and SDK failure behavior.
-- `test/abi.test.ts` contains the tests for ABI call preparation, overloads, and decoding.
-- `test/sdk.typecheck.ts` gives the specified inferred types. Run `npm run typecheck` to do this check.
-- `test/benchmark-limits.test.ts` contains the tests for the limit benchmark script.
-
-Update the implementation, generated initcode, tests, API comments, README, and docs when public behavior changes.
-
 ## Write comments and documentation
 
 Use [ASD-STE100 Issue 9](https://www.asd-ste100.org/assets/files/ASD-STE100_ISSUE9.pdf) for comments and documentation.
@@ -119,55 +103,9 @@ Use active voice.
 Put one instruction in each sentence.
 Use at most 20 words in a procedural sentence.
 Use at most 25 words in a descriptive sentence.
-Use approved words and the technical terms below.
+Use approved words and established software terms.
 Do not use semicolons or contractions.
 Do not put more than three nouns together unless they make a technical term.
 Use the same term for the same item.
 Do a check of the language before you make a pull request.
-
-## Technical terms
-
-These terms have the specified project meanings.
 API names, file names, EVM instructions, and package names keep their official spelling.
-
-| Technical noun | Project meaning |
-| --- | --- |
-| batch | A group of calls in one `eth_call` request. |
-| calldata | The bytes that a caller gives to an EVM call. |
-| initcode | The code that runs during contract creation. |
-| return data | The bytes that an EVM call returns. |
-| revert data | The bytes that an EVM call returns when it reverts. |
-| wire format | The specified arrangement of fields in request or response bytes. |
-| peer dependency override | A package setting that replaces the version requirement from another package. |
-| type inference | The TypeScript process that gets types from declarations or expressions. |
-| type check | A check of TypeScript types against the program declarations. |
-| build | The compiled program files that a build command makes. |
-| benchmark | A program that measures processing time, memory allocation, or size limits. |
-| memory allocation | The memory that the program gets for its data. |
-| garbage collector | The software that removes objects that are no longer necessary for the program. |
-| median | The middle value in a sorted set of measurements. |
-| hover text | The text that the editor shows when the cursor is above a code expression. |
-
-Use these technical verbs only for their specified computer processes:
-
-| Technical verb | Project meaning |
-| --- | --- |
-| encode | Write values as bytes in a specified format. |
-| decode | Get values from bytes in a specified format. |
-| parse | Read fields from text or bytes with a specified structure. |
-| compile | Make program code from source code with a compiler. |
-| build | Make compiled program files with a build command. |
-| install | Put a package or tool on the computer. |
-| load | Read data from a file or another source into the program. |
-| store | Write data to a memory area or field. |
-| copy | Make another instance of data in a specified memory area or file. |
-| run | Cause a program or command to do its operations. |
-| deploy | Put contract code on the chain. |
-| return | Give data back to the caller. |
-| revert | Stop an EVM call without keeping its state changes. |
-| throw | Give a program error to the caller. |
-| infer | Get a TypeScript type from a declaration or expression. |
-| allocate | Give memory to program data. |
-| batch | Put calls in one `eth_call` request. |
-| validate | Do a check of input against the specified rules. |
-| optimize | Make the program smaller or decrease its gas use. |

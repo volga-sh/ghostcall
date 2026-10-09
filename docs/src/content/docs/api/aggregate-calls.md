@@ -5,8 +5,7 @@ description: Send a batch and return raw success or failure results.
 
 `aggregateCalls()` sends one `eth_call` and returns one
 [`GhostcallResult`](/api/types/) per call. Results have the same order as the
-calls. Use this function to read success flags and revert data. You can also
-let selected calls fail.
+calls.
 
 ## Usage
 
@@ -70,6 +69,3 @@ const [result] = await aggregateCalls(client, [{ to: weth, data: "0x18160ddd" }]
 - `Error` when the number of results is different from the number of calls.
 
 The SDK does not change provider or transport errors.
-
-Use [`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/) to get decoded
-values. This function throws an error if a call fails.

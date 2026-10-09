@@ -15,16 +15,4 @@ ghostcall exports four functions, one error class, and their
 
 [`GhostcallSubcallError`](/api/subcall-error/) shows which call failed.
 
-Put the pointer over a name to read its signature and description.
-
-```ts twoslash
-import {
-	aggregateCalls,
-	aggregateDecodedCalls,
-	decodeResults,
-	encodeCalls,
-	GhostcallSubcallError,
-} from "@volga-sh/evm-ghostcall";
-```
-
 Read [Limits](/limits/) before you build large batches.

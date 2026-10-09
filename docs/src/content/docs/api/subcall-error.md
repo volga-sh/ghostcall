@@ -22,8 +22,7 @@ try {
 }
 ```
 
-The error extends `Error` with three properties. These properties are
-`readonly`:
+The error extends `Error` with three `readonly` properties:
 
 | Property | Type | Meaning |
 | --- | --- | --- |

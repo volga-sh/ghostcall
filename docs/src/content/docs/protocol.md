@@ -33,11 +33,6 @@ Do a test of the endpoint that the application uses.
 ## Call operation
 
 Each subcall uses the EVM `CALL` instruction with zero value.
-The output size for `CALL` is zero.
-`CALL` writes no return data when its output size is zero.
-The output offset uses the old entry address to save one instruction byte.
-This offset does not change the call result when the output size is zero.
-`RETURNDATACOPY` writes the return data after the result header.
 
 A target can change state during the simulation.
 A later call in the same batch can read that changed state.
@@ -55,16 +50,9 @@ The request contains the compiled ghostcall program before the call entries:
 <compiled ghostcall program><call><call>...
 ```
 
-Each call has these fields:
-
-```text
-2 bytes calldata length (big-endian uint16)
-20 bytes target address
-N bytes calldata
-```
-
-The first two fields make a 22-byte header.
-This diagram shows the byte offsets in a call entry:
+Each call has a 22-byte header and its calldata.
+The length is a big-endian uint16.
+Offsets are in bytes:
 
 ```text
 0             2                         22           22 + N
@@ -112,8 +100,6 @@ Use the program, encoder, and decoder from the same version.
 ## Failure of the full request
 
 ghostcall stops with an EVM error and no response if one call returns more than `32,767` bytes.
-`RETURNDATACOPY` reads after the end of the return data for this length.
-The program cannot know this length before it runs the call.
 
 The outer `eth_call` can also fail if it uses all the available gas.
 The chain or RPC client can stop a request because of the request size or response size.
@@ -121,13 +107,6 @@ Chains with [EIP-3541](https://eips.ethereum.org/EIPS/eip-3541) reject a CREATE 
 Refer to [Limits](/limits/#first-byte-of-the-response) for these lengths.
 These failures do not give a batch response.
 The SDK gives the provider error to the caller.
-
-One failed subcall does not cause the full request to fail.
-The SDK uses these rules for a failed subcall:
-
-- `aggregateDecodedCalls()` throws for every failed call.
-- `aggregateCalls()` throws unless the entry has `allowFailure: true`.
-- `decodeResults()` returns the success bit without a failure rule.
 
 ## Next
 

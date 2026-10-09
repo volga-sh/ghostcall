@@ -13,8 +13,6 @@ object "Ghostcall" {
         // | program | calls that have run  | next calls| results      | unused |
         // +---------+----------------------+-----------+--------------+-------->
         // |<-------------- input copy ---------------->|<-- RETURN -->|
-        //                                              ^
-        //                              The input copy ends at codesize().
         //
         // Copy the request into memory one time. CALL reads calldata from this copy.
         // Put results after the input copy. A result cannot change the next call's input.
@@ -46,10 +44,9 @@ object "Ghostcall" {
             entry := add(calldataStart, calldataSize)
 
             // The shift puts the target in the low 160 bits. CALL uses these bits only.
-            // CALL sends zero value. A later call can read state changes from an earlier call.
-            // CALL has output size zero. Thus the output offset does not affect memory.
-            // Use the old cursor as this offset to remove its stack item.
-            // This removes one stack instruction and saves one byte.
+            // CALL lets a later call read state changes from an earlier call.
+            // CALL ignores the output offset because its output size is zero.
+            // Use the old cursor for this offset to save one byte.
             let success := call(gas(), shr(80, headerWord), 0, calldataStart, calldataSize, oldEntry, 0)
 
             // Result memory after each write:

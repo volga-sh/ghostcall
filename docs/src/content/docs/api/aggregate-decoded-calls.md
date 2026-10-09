@@ -26,20 +26,6 @@ const results = await aggregateDecodedCalls(client, [
 ]);
 ```
 
-The SDK compares function names and arguments with the ABI. Editors suggest
-function names from the ABI:
-
-```ts twoslash
-import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
-import { erc20Abi } from "viem";
-const token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-// ---cut---
-await aggregateDecodedCalls(client, [
-	{ to: token, abi: erc20Abi, functionName: "totalSupply" },
-	//                                          ^|
-]);
-```
-
 You must supply `args` if the function has inputs. If the function has no
 inputs, you do not need `args`. You can also use `args: []`. You do not need
 type annotations or type casts for the results.
@@ -80,8 +66,7 @@ const results = await aggregateDecodedCalls(client, [
 
 A custom decoder receives `(returnData, index)`. These arguments contain the
 return data and the position of the call with `success: true`. The first position is
-zero. The decoder return type sets the result type for that position. Decoder
-errors do not change.
+zero. The decoder return type sets the result type for that position.
 
 Each entry uses ABI fields or raw calldata with a decoder. TypeScript rejects
 entries that mix these fields. You cannot use `allowFailure` in either form.

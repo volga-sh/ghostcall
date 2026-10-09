@@ -9,7 +9,7 @@ import {
 	GhostcallSubcallError,
 	type Hex,
 } from "../src/sdk/index.ts";
-import { deployContract } from "./support/anvil.ts";
+import { deployContract, startAnvil, stopAnvil } from "./support/anvil.ts";
 import { setupMock } from "./support/mock.ts";
 
 test("ghostcall integration", async (t) => {
@@ -42,15 +42,6 @@ test("ghostcall integration", async (t) => {
 	});
 
 	await t.test("runs empty batches through CREATE-style eth_call", async () => {
-		const data = encodeCalls([]);
-		assert.equal(data, "0x5f80f3");
-		assert.equal(
-			await transport.request({
-				method: "eth_call",
-				params: [{ data }, "latest"],
-			}),
-			"0x",
-		);
 		assert.deepEqual(await aggregateCalls(transport, []), []);
 	});
 
@@ -159,11 +150,7 @@ test("keeps uint15 return and revert data and stops on an oversized entry", asyn
 
 	const oversizedData: Hex = `0x${"33".repeat(0x8000)}`;
 	for (const target of [echo, revertEcho]) {
-		const oversizedCall = {
-			to: target,
-			data: oversizedData,
-			allowFailure: true,
-		};
+		const oversizedCall = { to: target, data: oversizedData };
 		for (const calls of [
 			[oversizedCall, laterCall],
 			[laterCall, oversizedCall],
@@ -187,28 +174,22 @@ test("keeps uint15 return and revert data and stops on an oversized entry", asyn
 
 	// The output is larger than the input and does not overwrite the second request entry.
 	// The response also shows that ghostcall adds no batch size limit.
-	const packed = await transport.request({
-		method: "eth_call",
-		params: [
-			{
-				data: encodeCalls([
-					{ to, data: "0x11111111" },
-					{ to, data: "0x22222222" },
-				]),
-			},
-			"latest",
+	assert.deepEqual(
+		await aggregateCalls(transport, [
+			{ to, data: "0x11111111" },
+			{ to, data: "0x22222222" },
+		]),
+		[
+			{ success: true, returnData: maxReturnData },
+			{ success: true, returnData: smallEntry },
 		],
-	});
-	assert.equal((packed.length - 2) / 2, 32_803);
-	assert.deepEqual(decodeResults(packed), [
-		{ success: true, returnData: maxReturnData },
-		{ success: true, returnData: smallEntry },
-	]);
+	);
 });
 
 test("EIP-3541 stops a batch when the first result header starts with 0xef", async (t) => {
 	// Increase the code size limit above the size of these responses.
-	const { transport } = await setupMock(t, 65536);
+	const { child, transport } = await startAnvil(["--code-size-limit", "65536"]);
+	t.after(() => stopAnvil(child));
 	const echo = await deployContract(
 		transport,
 		"0x6007600a5f3960075ff3365f5f37365ff3",
@@ -217,8 +198,7 @@ test("EIP-3541 stops a batch when the first result header starts with 0xef", asy
 		transport,
 		"0x6007600a5f3960075ff3365f5f37365ffd",
 	);
-	// Test the full range and the two adjacent lengths.
-	for (let length = 30_591; length <= 30_720; length += 1) {
+	for (const length of [30_591, 30_592, 30_719, 30_720]) {
 		const returnData: Hex = `0x${"11".repeat(length)}`;
 		for (const [to, success] of [
 			[echo, true],

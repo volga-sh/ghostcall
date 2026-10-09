@@ -82,10 +82,8 @@ function prepareDecodedCalls(
 		if (call.abi === undefined) return call;
 		const args = call.args ?? [];
 		const abiFunction = resolveAbiFunction(call, args, sharedFunctions);
-		// If arguments are missing, ox encodes only the selector.
-		// Reject the incorrect argument count before the RPC request.
-		// Literal ABI types prevent this error.
-		// This check is necessary for ABIs from runtime data.
+		// ox encodes only the selector if arguments are missing.
+		// Do a check of the argument count for runtime ABIs before the RPC request.
 		if (args.length !== abiFunction.inputs.length) {
 			throw new TypeError(
 				`${call.functionName} expects ${abiFunction.inputs.length} arguments, received ${args.length}`,

@@ -3,8 +3,7 @@ title: Types
 description: The public TypeScript types that ghostcall exports.
 ---
 
-Import types from `@volga-sh/evm-ghostcall`. The pages for functions link to
-these definitions.
+Import types from `@volga-sh/evm-ghostcall`.
 
 ```ts twoslash
 import type {

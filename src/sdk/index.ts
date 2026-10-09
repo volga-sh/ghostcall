@@ -8,16 +8,10 @@ import {
 } from "./abi.ts";
 import { ghostcallInitcode } from "./generated/initcode.ts";
 
-/**
- * The string has the `0x` prefix.
- * The SDK does a check at each wire-format boundary.
- */
+/** The string has the `0x` prefix. */
 type Hex = `0x${string}`;
 
-/**
- * The call contains calldata for one target.
- * The encoder does not use the failure policy.
- */
+/** The encoder does not use the failure policy. */
 type GhostcallCall = {
 	to: Hex;
 	/** The maximum calldata length is 65,535 bytes. The request stores a uint16 length. */
@@ -38,7 +32,7 @@ type GhostcallDecodedCall<TResult = unknown> = {
 	allowFailure?: never;
 };
 
-/** Each call has one result. A call with a failure status stores its revert data in returnData. */
+/** A call with a failure status stores its revert data in returnData. */
 type GhostcallResult = { success: boolean; returnData: Hex };
 
 type GhostcallDecodedInput = GhostcallAbiCall | GhostcallDecodedCall;
@@ -73,7 +67,7 @@ type GhostcallAggregateOptions = GhostcallEncodeOptions & {
 	ethCall?: {
 		from?: Hex;
 		gas?: bigint;
-		/** Use a block number or a named tag. The default value is "latest". */
+		/** The default value is "latest". */
 		blockTag?:
 			| bigint
 			| "latest"
@@ -84,10 +78,7 @@ type GhostcallAggregateOptions = GhostcallEncodeOptions & {
 	};
 };
 
-/**
- * The provider has an EIP-1193 request method.
- * A viem client or an ox transport can supply this method.
- */
+/** The provider has an EIP-1193 request method. */
 type GhostcallProvider = {
 	request(args: { method: string; params?: unknown }): Promise<unknown>;
 };
@@ -127,14 +118,13 @@ const successFlag = 1;
 // EIP-3860 gives the default limit for initcode size.
 const defaultMaxInitcodeBytes = 0xc000;
 // The three-byte initcode PUSH0, DUP1, RETURN returns no data.
-const emptyBatchInitcode = "0x5f80f3" as const;
+const emptyBatchInitcode = "0x5f80f3";
 
 /**
  * Build data for a CREATE-style eth_call.
  * For a list with one or more calls, put the initcode before the call entries.
  * Each entry has a 22-byte header and calldata.
- * For an empty list, return the three-byte initcode `0x5f80f3`.
- * This initcode returns no data.
+ * For an empty list, use the three-byte initcode `0x5f80f3` to return no data.
  * Send the request without a `to` address.
  * Throw TypeError for incorrect input.
  * Throw RangeError if the input is larger than a size limit.
@@ -226,10 +216,7 @@ function decodeResults(data: Hex): GhostcallResult[] {
 	return decodeValidatedResults(assertHex(data, "data"));
 }
 
-/**
- * Send one eth_call and return one result for each call.
- * Do not use a failure policy.
- */
+// Apply failure policies in the aggregate APIs.
 async function executeCalls(
 	provider: GhostcallProvider,
 	calls: readonly GhostcallCall[],
@@ -280,8 +267,6 @@ function decodeValidatedResults(data: Hex): GhostcallResult[] {
 	return results;
 }
 
-// The types do not give a length of 20 bytes.
-// The Yul program does not do a check of the target.
 function assertAddress(value: string, label: string): Hex {
 	if (!isAddress(value, { strict: false })) {
 		throw new TypeError(`${label} must be a 20-byte hex string`);
@@ -290,7 +275,6 @@ function assertAddress(value: string, label: string): Hex {
 }
 
 function assertHex(value: unknown, label: string): Hex {
-	// ox does a check of the prefix and the digits.
 	// The wire format uses only whole bytes.
 	if (!isHex(value, { strict: true }) || value.length % 2 !== 0) {
 		throw new TypeError(
