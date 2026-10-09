@@ -1,19 +1,19 @@
 ---
 title: decodeResults
-description: Parse the raw response returned by ghostcall.
+description: Parse the raw response from ghostcall.
 ---
 
-`decodeResults()` parses the hex returned by an `eth_call` built with
-[`encodeCalls()`](/api/encode-calls/) into one
-[`GhostcallResult`](/api/types/) per call, in call order. See
-[Protocol](/protocol/#response-bytes) for the byte layout.
+`decodeResults()` parses the hex response from an `eth_call` that uses
+[`encodeCalls()`](/api/encode-calls/). It returns one
+[`GhostcallResult`](/api/types/) per call. Results have the same order as the
+calls. Refer to [Protocol](/protocol/#response-bytes) for the byte layout.
 
 ## Usage
 
 ```ts twoslash
 import { decodeResults } from "@volga-sh/evm-ghostcall";
 
-const results = decodeResults("0x8002cafe0004deadbeef");
+const results = decodeResults("0x0005cafe0008deadbeef");
 // [
 //   { success: true, returnData: "0xcafe" },
 //   { success: false, returnData: "0xdeadbeef" },
@@ -27,8 +27,9 @@ import { decodeResults } from "@volga-sh/evm-ghostcall";
 //       ^?
 ```
 
-`decodeResults("0x")` returns `[]`. The function applies no failure policy,
-does not ABI-decode `returnData`, and does not know how many calls were sent.
+`decodeResults("0x")` returns `[]`. The function returns failed entries without
+an error. It does not decode `returnData` with an ABI. It does not use the
+number of calls in the request.
 
 ## Throws
 

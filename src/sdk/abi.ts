@@ -4,7 +4,7 @@ import type * as AbiItem from "ox/AbiItem";
 
 import type { GhostcallDecodedCall, Hex } from "./index.ts";
 
-// Distribute over functions so each name stays paired with its own arguments.
+// Keep the arguments with their function name when the function types form a union.
 type FunctionCall<TFunction extends AbiFunction.AbiFunction> =
 	TFunction extends AbiFunction.AbiFunction
 		? {
@@ -15,8 +15,8 @@ type FunctionCall<TFunction extends AbiFunction.AbiFunction> =
 		: never;
 
 /**
- * An ABI-described call. A literal ABI determines valid function names and args.
- * Use `as const` or an ABI parser to retain those literal types.
+ * The ABI gives correct function names and arguments for this call.
+ * Use `as const` or an ABI parser to keep literal types.
  */
 type GhostcallAbiCall<TAbi extends Abi = Abi> = {
 	to: Hex;
@@ -37,8 +37,9 @@ type CallArguments<TCall extends GhostcallAbiCall> = TCall extends {
 	? TArgs
 	: readonly [];
 
-// Infer ox's argument constraint through its public options, then let ox choose
-// the overload. This keeps our result types aligned with runtime resolution.
+// Get the argument constraint from the public options in ox.
+// Let ox select the overload.
+// This keeps the result types equal to the types that ox selects at runtime.
 type ResolvedFunction<TCall extends GhostcallAbiCall> =
 	AbiItem.fromAbi.Options<
 		TCall["abi"],
@@ -56,20 +57,22 @@ type ResolvedFunction<TCall extends GhostcallAbiCall> =
 			>
 		: never;
 
-/** The decoded result of an ABI call, including argument-selected overloads. */
+/** The decoded ABI result uses the overload that the arguments select. */
 type GhostcallAbiResult<TCall extends GhostcallAbiCall> =
 	AbiFunction.decodeResult.ReturnType<
 		Extract<ResolvedFunction<TCall>, AbiFunction.AbiFunction>
 	>;
 
-// Functions resolved within one batch, keyed by ABI object and function name.
-// `null` marks a name that must be resolved per call from its arguments.
+// The cache is for one batch.
+// The cache uses the ABI object and the function name as keys.
+// For a null value, use the arguments to select a function for each call.
 type FunctionsByName = Map<string, AbiFunction.AbiFunction | null>;
 type SharedFunctions = Map<Abi, FunctionsByName>;
 
 /**
- * Turn ABI calls into raw decoded calls that encode and decode with the same
- * resolved function. Raw decoded calls pass through unchanged.
+ * Change ABI calls to calls with calldata and a decoder.
+ * Use the same function to encode arguments and decode results.
+ * Keep calls with custom decoders unchanged.
  */
 function prepareDecodedCalls(
 	calls: readonly (GhostcallAbiCall | GhostcallDecodedCall)[],
@@ -79,8 +82,8 @@ function prepareDecodedCalls(
 		if (call.abi === undefined) return call;
 		const args = call.args ?? [];
 		const abiFunction = resolveAbiFunction(call, args, sharedFunctions);
-		// ox encodes only the selector when args are missing, so reject that
-		// before RPC; literal ABIs catch it in types, runtime-loaded ABIs cannot.
+		// ox encodes only the selector if arguments are missing.
+		// Do a check of the argument count for runtime ABIs before the RPC request.
 		if (args.length !== abiFunction.inputs.length) {
 			throw new TypeError(
 				`${call.functionName} expects ${abiFunction.inputs.length} arguments, received ${args.length}`,
@@ -95,9 +98,11 @@ function prepareDecodedCalls(
 	});
 }
 
-// Each ox lookup hashes the function signature, so a batch resolves each name
-// once when it can. ox ignores args when exactly one ABI item has the name, of
-// any item type. Other names resolve per call, by argument types.
+// Each ox lookup hashes the function signature.
+// Reuse one function for each name with only one ABI item.
+// ox ignores arguments if exactly one ABI item has the name.
+// This rule includes all item types.
+// For other names, use the arguments to select a function for each call.
 function resolveAbiFunction(
 	call: GhostcallAbiCall,
 	args: readonly unknown[],

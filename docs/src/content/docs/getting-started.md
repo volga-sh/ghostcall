@@ -11,10 +11,9 @@ This guide reads two ERC-20 values in one RPC request.
 npm install @volga-sh/evm-ghostcall viem
 ```
 
-ghostcall accepts any provider with an
-[EIP‑1193](https://eips.ethereum.org/EIPS/eip-1193) `request` method. This guide
-uses viem for the provider and ABI; ghostcall itself uses ox to encode arguments
-and decode results.
+ghostcall accepts a provider with an [EIP‑1193](https://eips.ethereum.org/EIPS/eip-1193) `request` method.
+This guide uses viem for the provider and ABI.
+ghostcall uses ox to encode arguments and decode results.
 
 ## 2. Create a client
 
@@ -27,8 +26,8 @@ const client = createPublicClient({ chain: mainnet, transport: http() });
 
 ## 3. Send the batch
 
-Each entry declares its target, ABI, function name, and arguments once. The same
-function definition encodes the call and decodes its result.
+Each entry contains its target, ABI, function name, and arguments.
+The encoder and decoder use the same function definition.
 
 ```ts twoslash
 import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
@@ -48,18 +47,15 @@ const [balance, allowance] = await aggregateDecodedCalls(client, [
 ]);
 ```
 
-Function names and argument types are checked against the ABI. Use a literal
-ABI (`as const`), viem's `parseAbi`, or ox's `Abi.from` to preserve inference;
-ABIs loaded at runtime still work, but their results have type `unknown`.
+The SDK does a check of function names and argument types against the ABI.
+Use a literal ABI (`as const`), viem's `parseAbi`, or ox's `Abi.from` for type inference.
+You can also load an ABI at runtime.
+Results from an ABI that you load at runtime have type `unknown`.
 
-If either call fails, `aggregateDecodedCalls()` throws a
-[`GhostcallSubcallError`](/api/subcall-error/).
+If a call fails, `aggregateDecodedCalls()` throws a [`GhostcallSubcallError`](/api/subcall-error/).
 
 ## Next
 
-- [`aggregateCalls()`](/api/aggregate-calls/) lets selected calls fail and sets
-  the block, sender, or gas.
-- [`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/) covers overloads and
-  custom decoders for raw calldata.
-- [`encodeCalls()`](/api/encode-calls/) builds the request when the application
-  sends the RPC call itself.
+- Use [`aggregateCalls()`](/api/aggregate-calls/) to let specified calls fail or set the block, sender, and gas.
+- Read [`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/) for overloads and custom decoders for raw calldata.
+- Use [`encodeCalls()`](/api/encode-calls/) to make a request that the application sends itself.

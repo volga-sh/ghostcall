@@ -1,5 +1,5 @@
 ---
-// biome-ignore lint/correctness/noUnusedVariables: Referenced by the Astro template.
+// biome-ignore lint/correctness/noUnusedVariables: The Astro template uses this variable.
 const repository = "https://github.com/volga-sh/ghostcall";
 ---
 
@@ -8,7 +8,7 @@ const repository = "https://github.com/volga-sh/ghostcall";
 			<div
 				class="batch-flow"
 				role="img"
-				aria-label="Three contract reads are encoded into one eth_call. Three results return in the same order."
+				aria-label="ghostcall sends three contract reads with one eth_call. The three results have the same order as the calls."
 			>
 				<ul class="flow-stack flow-inputs" aria-hidden="true">
 					<li>balanceOf(address)</li>
@@ -33,12 +33,12 @@ const repository = "https://github.com/volga-sh/ghostcall";
 			</div>
 
 			<figcaption>
-				<span><i>Fig. 0.1</i> — Three contract reads encoded into one simulated request.</span>
+				<span><i>Fig. 0.1</i> — One simulated request sends three contract reads.</span>
 				<strong>3 calls / 1 request</strong>
 			</figcaption>
 	</figure>
 
-	<nav class="plate-links" aria-label="Landing page links">
+	<nav class="plate-links" aria-label="Links on the main page">
 		<a href="/getting-started/">Getting started <span aria-hidden="true">→</span></a>
 		<a href={repository}>Source <span aria-hidden="true">→</span></a>
 	</nav>

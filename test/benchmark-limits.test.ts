@@ -11,14 +11,15 @@ import {
 	parseBenchmarkArgs,
 	runBenchmark,
 } from "../scripts/benchmark-limits.ts";
-import { encodeCalls, type Hex } from "../src/sdk/index.ts";
+import { ghostcallInitcode } from "../src/sdk/generated/initcode.ts";
+import type { Hex } from "../src/sdk/index.ts";
 
 const tokenA = "0x1111111111111111111111111111111111111111";
 const tokenB = "0x2222222222222222222222222222222222222222";
 const ownerA = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const ownerB = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const env = { GHOSTCALL_BENCH_RPC_URL: "https://env.invalid/rpc" };
-const initcodeBytes = hexSize(encodeCalls([]));
+const initcodeBytes = hexSize(ghostcallInitcode);
 const config = {
 	rpcUrl: env.GHOSTCALL_BENCH_RPC_URL,
 	mode: "balances",
@@ -122,6 +123,8 @@ test("caps balance searches by configured initcode bytes", async (t) => {
 	assert.equal(report.balances?.maxPass, 3);
 	assert.equal(report.balances?.exhaustedConfiguredMax, true);
 	assert.equal(report.balances?.fullCreateDataBytes, maxInitcodeBytes);
+	assert.equal(report.ghostcallInitcodeBytes, initcodeBytes);
+	assert.equal(report.balances?.returnedBytes, 3 * 34);
 	assert.deepEqual(counts, [1, 2, 3]);
 });
 
@@ -167,5 +170,5 @@ function mockBalanceRpc(
 }
 
 function balanceResultPayload(count: number, success = true): Hex {
-	return `0x${`${success ? "8020" : "0020"}${"00".repeat(32)}`.repeat(count)}`;
+	return `0x${`${success ? "0041" : "0040"}${"00".repeat(32)}`.repeat(count)}`;
 }

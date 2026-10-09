@@ -1,53 +1,80 @@
 object "Ghostcall" {
     code {
-        // CREATE-style eth_call initcode: RETURN becomes the simulated runtime bytes.
-        // Input: appended [uint16 calldata length][20-byte target][calldata] entries.
-        // Output: [success bit | uint15 returndata length][returndata] entries.
-        // The SDK validates inputs; malformed hand-built payloads are unsupported.
+        // The EVM runs this initcode for an eth_call without a target address.
+        // RETURN gives the results to eth_call. No contract stays on the chain.
+        // The SDK does a check of each request before it sends the request.
+        // This program does not do a check of the request entries.
 
-        // Without a data section solc appends no trailing INVALID byte, so this
-        // object's size is the offset of the first caller-appended byte.
-        let payloadCursor := datasize("Ghostcall")
+        // Memory at the start of each loop:
+        //
+        // 0         datasize("Ghostcall")   entry       codesize()     writePtr
+        // |         |                      |           |              |
+        // +---------+----------------------+-----------+--------------+-------->
+        // | program | calls that have run  | next calls| results      | unused |
+        // +---------+----------------------+-----------+--------------+-------->
+        // |<-------------- input copy ---------------->|<-- RETURN -->|
+        //
+        // Copy the request into memory one time. CALL reads calldata from this copy.
+        // Put results after the input copy. A result cannot change the next call's input.
+        codecopy(0, 0, codesize())
 
-        // [0, writePtr) is finalized output. Everything after it is scratch.
-        let writePtr := 0x00
+        // This object has no data section. Solc does not add an INVALID byte.
+        // Thus the first entry starts at datasize("Ghostcall").
+        let entry := datasize("Ghostcall")
+        let writePtr := codesize()
 
+        // The main program must have one or more entries.
+        // For an empty batch, the SDK uses a different program that returns no data.
         for {} 1 {} {
-            // Append the previous call's returndata after its header. The buffer is
-            // empty before the first call, and the loop only comes back here once
-            // the length has passed the uint15 check below.
-            returndatacopy(writePtr, 0, returndatasize())
+            // mload(entry) reads this word. Offsets are in bytes.
+            //
+            // entry         entry + 2               entry + 22     entry + 32
+            // |             |                       |              |
+            // +-------------+-----------------------+--------------+
+            // | length (2)  | target address (20)   | next bytes   |
+            // +-------------+-----------------------+--------------+
+            // |<--- 16 --->|<--------- 160 -------->|<---- 80 ---->|
+            //                       Widths are in bits.
+            //
+            // The program does not use the last 80 bits.
+            let headerWord := mload(entry)
+            let calldataSize := shr(240, headerWord)
+            let oldEntry := entry
+            let calldataStart := add(entry, 22)
+            entry := add(calldataStart, calldataSize)
+
+            // The shift puts the target in the low 160 bits. CALL uses these bits only.
+            // CALL lets a later call read state changes from an earlier call.
+            // CALL ignores the output offset because its output size is zero.
+            // Use the old cursor for this offset to save one byte.
+            let success := call(gas(), shr(80, headerWord), 0, calldataStart, calldataSize, oldEntry, 0)
+
+            // Result memory after each write:
+            //
+            // writePtr    writePtr + 2                            writePtr + 32
+            // |           |                                       |
+            // +-----------+---------------------------------------+
+            // | header(2) | temporary bytes                       |  MSTORE
+            // +-----------+---------------------------------------+
+            // +-----------+-----------------------------+
+            // | header(2) | returndata                  |            RETURNDATACOPY
+            // +-----------+-----------------------------+
+            //                                           ^ next writePtr
+            //
+            // The header stores length in bits 1-15 and success in bit 0.
+            // Later writes replace the temporary bytes. RETURN does not include unused bytes.
+            mstore(writePtr, shl(240, add(success, add(returndatasize(), returndatasize()))))
+            writePtr := add(2, writePtr)
+
+            // A length of 32,767 bytes or less gives source offset zero.
+            // A larger length gives a nonzero offset. The copy reads past the data buffer.
+            // The EVM stops with an error and no data. It cannot return the incorrect header.
+            returndatacopy(writePtr, shr(15, returndatasize()), returndatasize())
             writePtr := add(writePtr, returndatasize())
 
-            // Aggregate size is governed by the active chain/client's CREATE policy.
-            if iszero(lt(payloadCursor, codesize())) {
-                return(0x00, writePtr)
-            }
-
-            // One word holds [length(2)][target(20)][unused(10)].
-            codecopy(writePtr, payloadCursor, 0x16)
-            let headerWord := mload(writePtr)
-            payloadCursor := add(payloadCursor, 0x16)
-            let calldataSize := shr(240, headerWord)
-
-            // Stage calldata over the input header, which now lives on the stack.
-            codecopy(writePtr, payloadCursor, calldataSize)
-            payloadCursor := add(payloadCursor, calldataSize)
-
-            // CALL truncates the shifted word to the low 160 address bits.
-            // Zero-value CALL (not STATICCALL) exposes state changes to later calls.
-            let success := call(gas(), shr(80, headerWord), 0, writePtr, calldataSize, 0, 0)
-
-            // Put the header in the high two bytes; the rest of the word is scratch
-            // that the next iteration's returndatacopy overwrites or leaves unreturned.
-            mstore(writePtr, or(shl(255, success), shl(240, returndatasize())))
-            writePtr := add(writePtr, 0x02)
-
-            // Reject lengths that would collide with the success bit. The bad
-            // header above is never returned.
-            if shr(15, returndatasize()) {
-                revert(0x00, 0x00)
-            }
+            // The last entry ends at codesize(). Thus entry is the start of the results.
+            // Reuse entry to calculate the result length. This decreases the program size.
+            if iszero(lt(entry, codesize())) { return(codesize(), sub(writePtr, entry)) }
         }
     }
 }

@@ -1,15 +1,15 @@
 ---
 title: Protocol
-description: How ghostcall runs a batch and packs its request and response bytes.
+description: The ghostcall request and response formats.
 ---
 
-This page defines the bytes sent to ghostcall and the bytes it returns. Most SDK
-users do not need to build these bytes themselves.
+This page gives the request and response formats.
+You can use the SDK to make a request.
 
 ## Contract creation through eth_call
 
-An `eth_call` normally includes a `to` address. Without `to`, the EVM treats the
-`data` as contract creation code, also called initcode:
+An `eth_call` usually has a `to` address.
+If the request has no `to` address, the EVM reads the `data` as initcode:
 
 ```json
 {
@@ -18,84 +18,98 @@ An `eth_call` normally includes a `to` address. Without `to`, the EVM treats the
 }
 ```
 
-ghostcall uses that creation step as a one-time program. It reads the call
-entries attached to its own code, runs them, and returns their results. The RPC
-request only simulates execution, so no contract is deployed and no state
-change is saved.
+Initcode is the code that runs during contract creation.
+The ghostcall initcode reads the call entries after its own code.
+It runs the calls in order and returns their results.
+An empty batch uses a separate 3-byte initcode program.
+That program returns an empty response.
+`encodeCalls([])` makes this empty request.
+The RPC request only simulates these operations.
+The chain does not keep a new contract or state changes.
 
-Some RPC endpoints reject `eth_call` without a `to` address. Test the endpoint
-used by the application.
+Some RPC endpoints do not accept `eth_call` without a `to` address.
+Do a test of the endpoint that the application uses.
 
-## Call execution
+## Call operation
 
-Subcalls run in order with the EVM `CALL` instruction and zero value.
+Each subcall uses the EVM `CALL` instruction with zero value.
 
-`CALL` is not the same as `STATICCALL`: a target can change state during the
-simulation, and a later call in the same batch can observe that change. No
-change remains after `eth_call` ends.
+A target can change state during the simulation.
+A later call in the same batch can read that changed state.
+The chain does not keep these changes after `eth_call` ends.
+`STATICCALL` does not let a target change state.
 
-Each call receives the gas left when it starts. Earlier calls therefore affect
-the gas available to later calls.
+Each call gets the gas that remains when the call starts.
+Earlier calls decrease the gas that later calls can use.
 
 ## Request bytes
 
-The request contains the compiled ghostcall program followed by call entries:
+The request contains the compiled ghostcall program before the call entries:
 
 ```text
 <compiled ghostcall program><call><call>...
 ```
 
-Each call has:
+Each call has a 22-byte header and its calldata.
+The length is a big-endian uint16.
+Offsets are in bytes:
 
 ```text
-2 bytes calldata length (big-endian uint16)
-20 bytes target address
-N bytes calldata
+0             2                         22           22 + N
++-------------+-------------------------+------------+
+| length      | target address          | calldata   |
+| 2 bytes     | 20 bytes                | N bytes    |
++-------------+-------------------------+------------+
 ```
 
-There is no call count. The program reads entries until it reaches the end of
-the request data.
+The request has no call count.
+The cursor is the address of the next call entry.
+The program stops when the cursor is at the end of the request.
 
-`encodeCalls()` checks addresses, hex strings, calldata lengths, and the full
-request size. The program itself does not validate the request bytes, which
-keeps it small: a truncated entry is padded with zero bytes and still executed,
-and stray trailing bytes become an extra call. Manually built bytes must follow
-the same layout; results from malformed requests are not defined.
+`encodeCalls()` does a check of addresses, hex strings, calldata lengths, and the full request size.
+The program does not do these checks in the EVM.
+This keeps the program small.
+Use this layout to make a request manually.
+End the request at an entry boundary.
+The protocol does not give specified results for incorrect requests.
 
 ## Response bytes
 
-The response contains one entry per call:
+The response contains one entry for each call:
 
 ```text
 2 bytes header
 N bytes return data
 ```
 
-The header uses:
+The header has these fields:
 
 ```text
-bit 15    call success
-bits 0-14 return data length (big-endian uint15)
+bit 0     call success
+bits 1-15 return data length (big-endian uint15)
+header    return data length * 2 + success bit
 ```
 
-A reverted call is still a response entry. Its success bit is `0`, and its
-return data contains the revert data when available.
+A failed subcall still has a response entry.
+Its success bit is `0`.
+The entry contains the revert data if the target gives revert data.
+`decodeResults()` rejects entries with missing header bytes or return data.
 
-## Whole-request failure
+Use the program, encoder, and decoder from the same version.
 
-The ghostcall program reverts with empty data if one call returns more than
-`32,767` bytes. This check must happen in the program because return size is not
-known before execution.
+## Failure of the full request
 
-Rules about whether an ordinary failed call should throw are applied later by
-the SDK:
+ghostcall stops with an EVM error and no response if one call returns more than `32,767` bytes.
 
-- `aggregateDecodedCalls()` throws for every failed call.
-- `aggregateCalls()` throws unless the entry sets `allowFailure: true`.
-- `decodeResults()` returns the success bit without applying a failure rule.
+The outer `eth_call` can also fail if it uses all the available gas.
+The chain or RPC client can stop a request because of the request size or response size.
+Chains with [EIP-3541](https://eips.ethereum.org/EIPS/eip-3541) reject a CREATE response that starts with `0xef`.
+Refer to [Limits](/limits/#first-byte-of-the-response) for these lengths.
+These failures do not give a batch response.
+The SDK gives the provider error to the caller.
 
 ## Next
 
-- See [Limits](/limits/) for request and response ceilings.
-- See [`encodeCalls()`](/api/encode-calls/) and
-  [`decodeResults()`](/api/decode-results/) to work with the byte format.
+- Read [Limits](/limits/) for request and response limits.
+- Read [`encodeCalls()`](/api/encode-calls/) and
+  [`decodeResults()`](/api/decode-results/) for the byte format.

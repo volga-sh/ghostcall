@@ -4,7 +4,7 @@ description: Batch contract reads through one CREATE-style eth_call.
 template: splash
 hero:
   title: Batch reads through one eth_call
-  tagline: ghostcall combines contract reads into one eth_call. No contract deployment or onchain dependencies are required.
+  tagline: ghostcall batches contract reads in one eth_call. It does not deploy a Multicall contract.
 head:
   - tag: title
     content: ghostcall — Batch reads through one eth_call
@@ -36,8 +36,8 @@ npm install @volga-sh/evm-ghostcall
 <ManualSection index="02" title="Read two values" id="read-two-values">
 
 This example reads the WETH total supply and one account balance on Ethereum.
-ghostcall sends both reads in one RPC request and returns decoded `bigint`
-values in the same order.
+ghostcall sends both reads in one RPC request.
+It returns decoded `bigint` values in the same order.
 
 ```ts twoslash title="Listing 2.1 · TypeScript"
 import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
@@ -63,20 +63,20 @@ const [supply, balance] = await aggregateDecodedCalls(client, [
 
 </ManualSection>
 
-<ManualSection index="03" title="How it works" id="how-it-works">
+<ManualSection index="03" title="Program operation" id="how-it-works">
 
-Batching reads normally means deploying a Multicall contract and routing every
-read through it. ghostcall removes that dependency by using a step the EVM
-already performs: contract creation.
+A Multicall contract runs a batch of reads on the chain.
+ghostcall uses contract creation to run a batch of reads without a Multicall contract.
 
-An `eth_call` without a `to` address makes the EVM treat its `data` as initcode,
-the code that runs once when a contract is created. Initcode normally ends by
-returning the runtime bytecode to store onchain. ghostcall returns batch results
-instead. Its 77-byte program reads the call entries appended after its own bytes,
-runs each one in order, and returns a packed result entry per call.
+If an `eth_call` has no `to` address, the EVM reads its `data` as initcode.
+Initcode is the code that runs during contract creation.
+It usually returns the runtime bytecode for the new contract.
+The ghostcall initcode returns batch results.
+The 60-byte program reads the call entries after its own bytes.
+It runs the calls in order and returns one result entry for each call.
 
-Because `eth_call` only simulates execution, no contract is deployed and no state
-change is saved.
+The `eth_call` only simulates these operations.
+The chain does not keep a new contract or state changes.
 
 <PayloadFigure />
 
@@ -92,7 +92,7 @@ change is saved.
 <ApiIndex />
 
 <p class="manual-follow-link not-content">
-	<a href="/api/">Complete API reference <span aria-hidden="true">→</span></a>
+	<a href="/api/">Full API reference <span aria-hidden="true">→</span></a>
 </p>
 
 </ManualSection>

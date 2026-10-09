@@ -1,7 +1,7 @@
 /*
- * Global styles are split by ownership, in cascade order. Component styles
- * stay beside their Astro component and use `not-content` to avoid Starlight's
- * prose rules.
+ * This file loads the global styles in cascade order.
+ * Each Astro component contains its own styles.
+ * Starlight does not use its prose rules for the `not-content` class.
  */
 @import "./base.css";
 @import "./starlight.css";

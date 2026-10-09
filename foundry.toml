@@ -9,9 +9,9 @@ cbor_metadata = false
 evm_version = "prague"
 solc_version = "0.8.37"
 
-# Ghostcall.yul's statement order is chosen for size. An empty Yul optimizer
-# sequence keeps that order, so the EVM code transform emits 77 bytes instead of
-# 79 with the default sequence. Peephole optimization still runs.
+# Keep the Yul statement order to decrease the program size.
+# The empty optimizer sequence gives 60 bytes. The default sequence gives 85 bytes.
+# The compiler still applies peephole optimization.
 [profile.default.optimizer_details]
 yul = true
 yulDetails = { optimizerSteps = ":" }

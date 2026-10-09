@@ -10,7 +10,8 @@ import type {
 	Hex,
 } from "../src/sdk/index.ts";
 
-// An optional module path lets the same fixtures measure a previous SDK revision.
+// The optional module path selects the SDK for this measurement.
+// The SDK must use the same wire format as these fixtures.
 const sdk: typeof import("../src/sdk/index.ts") = await import(
 	process.argv[2]
 		? pathToFileURL(resolve(process.argv[2])).href
@@ -40,8 +41,9 @@ async function measure(
 	}
 	samples.sort((a, b) => a - b);
 
-	// Sample allocations separately so profiler overhead does not affect timing.
-	// Include collected objects: retained heap alone misses temporary allocations.
+	// Measure allocations in an isolated run to keep profiler costs out of the time measurement.
+	// Include objects that the garbage collector removed.
+	// The remaining heap does not show all temporary allocations.
 	const session = new Session();
 	session.connect();
 	let allocatedBytes = 0;
@@ -66,9 +68,9 @@ async function measure(
 	);
 }
 
-console.log(`SDK benchmark (${process.version}; median of 7 runs)`);
+console.log(`SDK benchmark (${process.version}, median of 7 runs)`);
 console.log(
-	"Allocation figures are sampling estimates, not peak or retained heap.",
+	"Allocation values are estimates from sampling. They do not show the maximum heap size or the heap that remains.",
 );
 for (const count of [1, 100, 700]) {
 	const calls: GhostcallDecodedCall[] = Array.from({ length: count }, () => ({
@@ -76,7 +78,7 @@ for (const count of [1, 100, 700]) {
 		data: `0x70a08231${"00".repeat(32)}`,
 		decodeResult: (data) => data.length,
 	}));
-	const response: Hex = `0x${`8020${"ab".repeat(32)}`.repeat(count)}`;
+	const response: Hex = `0x${`0041${"ab".repeat(32)}`.repeat(count)}`;
 	const provider: GhostcallProvider = {
 		request: async ({ params }) => {
 			const [{ data }] = params as [{ data: Hex }, string];
@@ -88,7 +90,7 @@ for (const count of [1, 100, 700]) {
 	await measure(`encodeCalls (${count})`, iterations, (iterations) => {
 		for (let index = 0; index < iterations; index += 1) {
 			const data = sdk.encodeCalls(calls);
-			// Touch the final byte to include flattening deferred string concatenation.
+			// Read the last byte to include the cost of string concatenation.
 			checksum ^= data.charCodeAt(data.length - 1);
 		}
 	});
@@ -102,12 +104,12 @@ for (const count of [1, 100, 700]) {
 	];
 	const abiCases: [string, () => GhostcallAbiCall][] = [
 		["ABI", () => ({ to, abi, functionName: "balanceOf", args: [to] })],
-		// Overloaded names cannot share one resolution, so each call resolves its own.
+		// Use one function lookup for each call with an overloaded name.
 		[
 			"overloaded ABI",
 			() => ({ to, abi: overloadedAbi, functionName: "balanceOf", args: [to] }),
 		],
-		// Resolutions are shared per ABI object, so separate objects share nothing.
+		// The batch uses the ABI object as the cache key.
 		[
 			"per-call ABI",
 			() => ({

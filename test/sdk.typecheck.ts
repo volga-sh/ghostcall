@@ -27,7 +27,7 @@ type Equal<A, B> =
 		? true
 		: false;
 
-/** Fails to compile unless its type argument is `true`. */
+/** The compiler returns an error unless the type argument is `true`. */
 function assertType<_T extends true>(): void {}
 
 async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
@@ -106,7 +106,7 @@ async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 	// @ts-expect-error Events are not callable functions.
 	aggregateDecodedCalls(provider, [eventName]);
 	const missingArgs = { to, abi, functionName: "balanceOf" } as const;
-	// @ts-expect-error balanceOf requires its address argument.
+	// @ts-expect-error balanceOf must have its address argument.
 	aggregateDecodedCalls(provider, [missingArgs]);
 	const wrongArgs = {
 		to,
@@ -114,7 +114,7 @@ async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 		functionName: "balanceOf",
 		args: [123n],
 	} as const;
-	// @ts-expect-error balanceOf accepts an address, not a bigint.
+	// @ts-expect-error The balanceOf argument must have the address type.
 	aggregateDecodedCalls(provider, [wrongArgs]);
 	const extraArgs = {
 		to,
@@ -130,7 +130,7 @@ async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 		functionName: "lookup",
 		args: [true],
 	} as const;
-	// @ts-expect-error No lookup overload accepts a boolean.
+	// @ts-expect-error No lookup overload has a boolean argument.
 	aggregateDecodedCalls(provider, [wrongOverload]);
 	const invalidTuple = {
 		to,
@@ -138,7 +138,7 @@ async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 		functionName: "positions",
 		args: [[{ owner: to, amount: "1" }]],
 	} as const;
-	// @ts-expect-error Nested tuple fields retain their ABI types.
+	// @ts-expect-error Nested tuple fields keep their ABI types.
 	aggregateDecodedCalls(provider, [invalidTuple]);
 	const mixedFields = {
 		to,
@@ -146,7 +146,7 @@ async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 		functionName: "totalSupply",
 		data: "0x",
 	} as const;
-	// @ts-expect-error A call cannot specify both an ABI function and raw calldata.
+	// @ts-expect-error A call cannot contain both an ABI function and raw calldata.
 	aggregateDecodedCalls(provider, [mixedFields]);
 	const mixedDecoder = {
 		to,
@@ -154,10 +154,10 @@ async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 		functionName: "totalSupply",
 		decodeResult: () => 1,
 	} as const;
-	// @ts-expect-error The ABI determines the decoder for ABI calls.
+	// @ts-expect-error ABI calls use the decoder from the ABI.
 	aggregateDecodedCalls(provider, [mixedDecoder]);
 	const missingDecoder = { to, data: "0x" } as const;
-	// @ts-expect-error Decoded raw calls require a decoder.
+	// @ts-expect-error A decoder is necessary for decoded raw calls.
 	aggregateDecodedCalls(provider, [missingDecoder]);
 	const failureAllowed = {
 		to,
@@ -165,7 +165,7 @@ async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 		decodeResult: () => 1,
 		allowFailure: true,
 	} as const;
-	// @ts-expect-error Reused objects cannot permit failure in the decoded API.
+	// @ts-expect-error An object in the decoded API cannot allow call failure.
 	aggregateDecodedCalls(provider, [failureAllowed]);
 }
 

@@ -82,7 +82,7 @@
 	--gc-rule-strong: #918a7e;
 	--gc-accent: #b4472a;
 	--gc-accent-soft: #ead8cf;
-	/* Readable on --gc-accent-soft, where --gc-accent only reaches 3.9:1. */
+	/* Use this color on --gc-accent-soft. --gc-accent gives a contrast ratio of only 3.9:1. */
 	--gc-accent-deep: #7d2e1c;
 	--gc-code: #eef2f5;
 	--gc-code-chrome: #e2e8ed;
@@ -121,8 +121,8 @@
 }
 
 :root {
-	/* A4 page width at 96dpi: 210mm = 793.7px. The label column, gap and the
-	   remaining 39.5rem measure leave margins in A4 proportion. */
+	/* An A4 page is 793.7px wide at 96dpi (210mm).
+	   The label column, gap, and 39.5rem content width keep the A4 proportions. */
 	--gc-sheet: 49.5rem;
 	--gc-label-column: 7.5rem;
 	--gc-column-gap: 2.5rem;
