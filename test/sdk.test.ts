@@ -29,7 +29,7 @@ const providerReturning = (result: unknown): GhostcallProvider => ({
 test("encodes ordered uint16-length/address/calldata entries after the initcode", () => {
 	const base = encodeCalls([]);
 	// Pin the bundled program size so initcode changes are explicit.
-	assert.equal(hexSize(base), 91);
+	assert.equal(hexSize(base), 77);
 	const first = { ...call, data: "0xaAbB" } satisfies GhostcallCall;
 	const second = {
 		to: "0x2222222222222222222222222222222222222222",

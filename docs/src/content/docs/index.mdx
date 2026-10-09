@@ -72,7 +72,7 @@ already performs: contract creation.
 An `eth_call` without a `to` address makes the EVM treat its `data` as initcode,
 the code that runs once when a contract is created. Initcode normally ends by
 returning the runtime bytecode to store onchain. ghostcall returns batch results
-instead. Its 91-byte program reads the call entries appended after its own bytes,
+instead. Its 77-byte program reads the call entries appended after its own bytes,
 runs each one in order, and returns a packed result entry per call.
 
 Because `eth_call` only simulates execution, no contract is deployed and no state
