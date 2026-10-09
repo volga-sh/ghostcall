@@ -1,10 +1,10 @@
 # ghostcall
 
-`ghostcall` batches EVM contract reads into one `eth_call` without deploying a
-Multicall contract.
+`ghostcall` batches EVM contract reads in one `eth_call`.
+It does not deploy a Multicall contract.
 
-**Documentation: [ghostcall.volga.sh](https://ghostcall.volga.sh)**: getting
-started, API reference, protocol, and size limits.
+**Documentation: [ghostcall.volga.sh](https://ghostcall.volga.sh)**: installation
+instructions, API, protocol, and size limits.
 
 ## Install
 
@@ -26,10 +26,10 @@ const weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const [totalSupply] = await aggregateDecodedCalls(client, [
 	{ to: weth, abi, functionName: "totalSupply" },
 ]);
-// totalSupply is inferred as bigint.
+// TypeScript infers bigint for totalSupply.
 ```
 
 ## Development
 
-See [Development](https://ghostcall.volga.sh/development/) for setup, the Yul
-workflow, tests, and benchmarks.
+Read [Development](https://ghostcall.volga.sh/development/) for installation
+instructions, Yul changes, tests, and benchmarks.

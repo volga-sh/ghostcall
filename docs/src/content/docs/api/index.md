@@ -1,6 +1,6 @@
 ---
 title: API Reference
-description: Choose a ghostcall function based on the required result.
+description: Select a ghostcall function for the necessary result.
 ---
 
 ghostcall exports four functions, one error class, and their
@@ -8,14 +8,14 @@ ghostcall exports four functions, one error class, and their
 
 | Goal | Function |
 | --- | --- |
-| Decode every result; any failed call throws | [`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/) |
-| Inspect success flags and return data; let selected calls fail | [`aggregateCalls()`](/api/aggregate-calls/) |
+| Decode each result. Failed calls cause errors. | [`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/) |
+| Read success flags and return data. Let selected calls fail. | [`aggregateCalls()`](/api/aggregate-calls/) |
 | Build request data for an `eth_call` sent by the application | [`encodeCalls()`](/api/encode-calls/) |
 | Parse the response to that `eth_call` | [`decodeResults()`](/api/decode-results/) |
 
-[`GhostcallSubcallError`](/api/subcall-error/) identifies which call failed.
+[`GhostcallSubcallError`](/api/subcall-error/) shows which call failed.
 
-Hover a name below to read its signature and description.
+Put the pointer over a name to read its signature and description.
 
 ```ts twoslash
 import {
@@ -27,4 +27,4 @@ import {
 } from "@volga-sh/evm-ghostcall";
 ```
 
-Read [Limits](/limits/) before building unusually large batches.
+Read [Limits](/limits/) before you build large batches.

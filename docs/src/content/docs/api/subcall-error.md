@@ -1,6 +1,6 @@
 ---
 title: GhostcallSubcallError
-description: Inspect a contract call that caused a batch to throw.
+description: Read data about a contract call that caused a batch error.
 ---
 
 `aggregateDecodedCalls()` throws `GhostcallSubcallError` for any failed call.
@@ -22,13 +22,14 @@ try {
 }
 ```
 
-The error extends `Error` with three readonly properties:
+The error extends `Error` with three properties. These properties are
+`readonly`:
 
 | Property | Type | Meaning |
 | --- | --- | --- |
 | `index` | `number` | Zero-based position of the failed call. |
-| `call` | `GhostcallCall` | The executed raw entry. ABI calls expose the target and prepared calldata. |
-| `returnData` | `Hex` | The raw revert data, or `0x` when the call reverted without data. |
+| `call` | `GhostcallCall` | The raw entry that ran. ABI entries contain the target and the calldata that the SDK prepared. |
+| `returnData` | `Hex` | The raw revert data. The value is `0x` if the call reverted without data. |
 
-The outer request completed, but an inner call failed. Provider, transport,
-encoding, and decoding errors pass through with their original types.
+The outer request completed. An inner call failed. Provider, transport,
+encoding, and decoding errors keep the same types.

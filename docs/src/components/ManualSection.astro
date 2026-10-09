@@ -5,9 +5,9 @@ interface Props {
 	id: string;
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: Referenced by the Astro template.
+// biome-ignore lint/correctness/noUnusedVariables: The Astro template uses this variable.
 const { index, title, id } = Astro.props;
-// biome-ignore lint/correctness/noUnusedVariables: Referenced by the Astro template.
+// biome-ignore lint/correctness/noUnusedVariables: The Astro template uses this variable.
 const headingId = `${id}-title`;
 ---
 
@@ -37,7 +37,7 @@ const headingId = `${id}-title`;
 
 	.manual-section-label {
 		min-width: 0;
-		/* Sits the label's cap-line on the first cap-line of the body text. */
+		/* Put the top of the label at the top of the body text. */
 		padding-top: 0.4rem;
 	}
 

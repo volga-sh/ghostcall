@@ -5,16 +5,16 @@ import { failOnTwoslashErrors, twoslash } from "./twoslash.mjs";
 const site = "https://ghostcall.volga.sh";
 const socialImage = new URL("/og.png", site).href;
 const socialImageAlt =
-	"ghostcall documentation: Batch reads through one eth_call.";
+	"ghostcall documentation: One eth_call reads contract state.";
 
 export default defineConfig({
 	site,
-	// Preserve spacing between inline elements after Astro 7 changed the default.
+	// Keep spaces between inline elements after the default change in Astro 7.
 	compressHTML: true,
 	integrations: [
 		starlight({
 			title: "ghostcall",
-			description: "Batch contract reads through one CREATE-style eth_call.",
+			description: "Read contracts with one CREATE-style eth_call.",
 			tableOfContents: false,
 			expressiveCode: {
 				themes: ["github-light"],

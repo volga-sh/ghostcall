@@ -1,5 +1,5 @@
 ---
-// biome-ignore lint/correctness/noUnusedVariables: Referenced by the Astro template.
+// biome-ignore lint/correctness/noUnusedVariables: The Astro template uses this variable.
 const hero = Astro.locals.starlightRoute.entry.data.hero;
 ---
 
@@ -30,7 +30,7 @@ const hero = Astro.locals.starlightRoute.entry.data.hero;
 		display: flex;
 		flex-direction: column;
 		gap: 0.3rem;
-		/* Sits the label's cap-line on the first cap-line of the title. */
+		/* Put the top of the label at the top of the title. */
 		padding-top: 0.15rem;
 		color: var(--gc-muted);
 		font-family: var(--gc-font-mono);

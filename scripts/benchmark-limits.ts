@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 import { RpcTransport } from "ox";
 import { validate as isAddress } from "ox/Address";
 import { size as hexSize } from "ox/Hex";
+import { ghostcallInitcode } from "../src/sdk/generated/initcode.ts";
 
 import {
 	decodeResults,
@@ -14,8 +15,9 @@ import {
 } from "../src/sdk/index.ts";
 
 /**
- * Mirrors the CLI flags one-to-one. Each size cap is a search ceiling, not a
- * claimed chain limit.
+ * These fields match the CLI flags.
+ * Each size limit stops the search.
+ * The search limit is not a chain limit.
  */
 type BenchmarkConfig = {
 	rpcUrl: string;
@@ -55,11 +57,11 @@ type BenchmarkReport = {
 		| null;
 };
 
-// [uint16 length][20-byte target][4-byte selector][32-byte owner word]
+// [uint16 length][20-byte address][4-byte selector][32-byte owner word]
 const balanceInputBytesPerCall = 2 + 20 + 4 + 32;
-// [2-byte header][32-byte uint256]
+// [2-byte result header][32-byte uint256]
 const balanceReturnedBytesPerCall = 2 + 32;
-// PUSH1 0 PUSH1 0 RETURN: initcode that returns empty runtime code.
+// The initcode `PUSH1 0 PUSH1 0 RETURN` returns an empty runtime.
 const emptyRuntimeInitcode = "60006000f3";
 const format = new Intl.NumberFormat("en-US").format;
 
@@ -81,7 +83,10 @@ Options:
   --max-runtime-bytes <bytes>  Raw returned-code search ceiling (default: 524288)
   --json                       Print machine-readable JSON`;
 
-/** Parse CLI flags and environment fallbacks, validating addresses before any RPC. */
+/**
+ * Parse the CLI flags and the default values from the environment.
+ * Do an address check before the RPC request.
+ */
 function parseBenchmarkArgs(
 	argv: readonly string[],
 	env: Record<string, string | undefined> = process.env,
@@ -109,9 +114,7 @@ function parseBenchmarkArgs(
 
 	const rpcUrl = values["rpc-url"] ?? env.GHOSTCALL_BENCH_RPC_URL;
 	if (!rpcUrl) {
-		throw new Error(
-			"Missing RPC URL. Pass --rpc-url or set GHOSTCALL_BENCH_RPC_URL.",
-		);
+		throw new Error("Supply --rpc-url or set GHOSTCALL_BENCH_RPC_URL.");
 	}
 	const { mode } = values;
 	if (mode !== "raw" && mode !== "balances" && mode !== "all") {
@@ -125,7 +128,9 @@ function parseBenchmarkArgs(
 			.map((word) => word.trim())
 			.filter(Boolean);
 		if (list.length === 0) {
-			throw new Error(`Balance mode requires at least one --${name} address.`);
+			throw new Error(
+				`Supply at least one --${name} address for balance mode.`,
+			);
 		}
 		return list.map((address, index) =>
 			assertAddress(address, `--${name}[${index}]`),
@@ -170,8 +175,8 @@ function parseBenchmarkArgs(
 }
 
 /**
- * Build `count` hand-encoded `balanceOf(address)` calls so the byte math stays
- * visible. Tokens rotate fastest: token 0/owner 0, token 1/owner 0, token 0/owner 1.
+ * Build `count` calls to `balanceOf(address)` with explicit byte encoding.
+ * Change the token index before you change the owner index.
  */
 function buildBalanceCalls(
 	count: number,
@@ -190,15 +195,18 @@ function buildBalanceCalls(
 }
 
 /**
- * Initcode of exactly `sizeBytes`: empty-runtime code plus unreachable zero
- * padding. findLimit starts at the 5-byte prefix, so sizes are never smaller.
+ * Build initcode with exactly `sizeBytes` bytes.
+ * Put zero padding after the code that returns an empty runtime.
+ * The padding does not run.
+ * `findLimit` starts at the 5-byte prefix.
+ * It does not request a smaller size.
  */
 function createRawInitcodeSizeProbe(sizeBytes: number): Hex {
 	const paddingBytes = sizeBytes - emptyRuntimeInitcode.length / 2;
 	return `0x${emptyRuntimeInitcode}${"00".repeat(paddingBytes)}`;
 }
 
-/** Initcode `PUSHn size PUSH1 0 RETURN`, returning `sizeBytes` zeroed bytes. */
+/** Use `PUSHn size PUSH1 0 RETURN` to return `sizeBytes` zero bytes. */
 function createRawRuntimeReturnProbe(sizeBytes: number): Hex {
 	const size = sizeBytes.toString(16);
 	const evenSize = size.length % 2 === 0 ? size : `0${size}`;
@@ -207,9 +215,11 @@ function createRawRuntimeReturnProbe(sizeBytes: number): Hex {
 }
 
 /**
- * Find the largest passing candidate: double from `min` until a probe fails or
- * reaches `max`, then binary-search the gap. `probe` returns null on success or
- * a short failure reason; unexpected conditions should throw.
+ * Find the largest candidate that returns success.
+ * Double the size from `min` until a probe returns failure or reaches `max`.
+ * Then use a binary search between these values.
+ * The probe returns `null` for success or a short reason for failure.
+ * Throw an error for other conditions.
  */
 async function findLimit(
 	min: number,
@@ -252,8 +262,9 @@ async function findLimit(
 }
 
 /**
- * Run the selected probes against one endpoint. Raw probes isolate the CREATE
- * input and output ceilings; balance probes measure a real ghostcall workload.
+ * Run the selected probes at one endpoint.
+ * Raw probes measure the CREATE limits for input and output.
+ * Balance probes measure a ghostcall batch.
  */
 async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
 	const provider: GhostcallProvider = RpcTransport.fromHttp(config.rpcUrl, {
@@ -273,7 +284,8 @@ async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
 		from: config.from,
 		...(config.gas !== undefined && { gas: config.gas }),
 	};
-	// RPC errors are probe failures; `check` decides whether the result passes.
+	// Use RPC errors as probe failures.
+	// The `check` callback compares the result with the expected value.
 	const probe = async (
 		data: Hex,
 		check: (result: Hex) => string | null,
@@ -287,10 +299,10 @@ async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
 		return check(result);
 	};
 
-	// Fail fast on an unreachable endpoint before running any probes.
+	// Make sure that the endpoint answers before you run the probes.
 	const chainId = await rpc("eth_chainId", []);
 	const latestBlock = await rpc("eth_blockNumber", []);
-	const ghostcallInitcodeBytes = hexSize(encodeCalls([]));
+	const ghostcallInitcodeBytes = hexSize(ghostcallInitcode);
 	const runsRaw = config.mode !== "balances";
 	const rawInitcode = runsRaw
 		? await findLimit(
@@ -370,7 +382,10 @@ function balanceFailure(result: Hex, count: number): string | null {
 	return null;
 }
 
-/** Human-readable report. It omits the RPC URL so provider keys are not printed. */
+/**
+ * Give a report in text format.
+ * Do not print the RPC URL because it can contain provider keys.
+ */
 function formatBenchmarkReport(report: BenchmarkReport): string {
 	const lines = [
 		"ghostcall limit benchmark",
@@ -393,7 +408,7 @@ function formatBenchmarkReport(report: BenchmarkReport): string {
 			title,
 			result.exhaustedConfiguredMax
 				? `max pass: >= ${format(result.maxPass)} ${unit}`
-				: `max pass: ${format(result.maxPass)} ${unit}; first fail ${format(result.firstFail ?? 0)} ${unit}`,
+				: `max pass: ${format(result.maxPass)} ${unit}. First failure ${format(result.firstFail ?? 0)} ${unit}`,
 			`attempts: ${format(result.attempts)}`,
 			`first failure: ${result.failure ?? "none before configured max"}`,
 		);

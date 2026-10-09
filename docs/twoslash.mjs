@@ -3,18 +3,19 @@ import ecTwoSlash from "expressive-code-twoslash";
 
 const plugin = ecTwoSlash({
 	twoslashOptions: {
-		// 0.6.1 creates a twoslasher per code block; a shared cache keeps each
-		// block from building its own ~100 MB TypeScript environment.
+		// Version 0.6.1 makes one twoslasher for each code block.
+		// Use one cache for all code blocks.
+		// The cache keeps one TypeScript environment of approximately 100 MB.
 		cache: new Map(),
-		// Every example receives a provider without declaring one.
+		// This file supplies a provider for each example.
 		extraFiles: {
 			"client.d.ts":
 				"declare const client: import('@volga-sh/evm-ghostcall').GhostcallProvider;",
 		},
 		compilerOptions: {
-			// Paths resolve from docs/. Check examples against the SDK source,
-			// and resolve its ox imports here because the docs build does not
-			// install the root node_modules.
+			// Paths start in docs/. Do a check of the examples against the SDK source.
+			// The docs build does not install node_modules from the repository root.
+			// Get the ox imports from docs/node_modules.
 			paths: {
 				"@volga-sh/evm-ghostcall": ["../src/sdk/index.ts"],
 				"ox/*": ["node_modules/ox/dist/core/*.d.ts"],
@@ -23,11 +24,12 @@ const plugin = ecTwoSlash({
 	},
 });
 
-// Astro logs a Markdown page whose code block throws and builds it empty, so
-// count failures and fail the build in `failOnTwoslashErrors`.
+// Astro writes a log when a code block throws an error.
+// It then makes an empty Markdown page.
+// Count these failures. Stop the build in `failOnTwoslashErrors`.
 let failedBlocks = 0;
 
-/** Type-checks `ts twoslash` code blocks and renders their editor hovers. */
+/** Does a type check of `ts twoslash` blocks. Shows type information in popups. */
 export const twoslash = {
 	...plugin,
 	hooks: {
@@ -40,7 +42,7 @@ export const twoslash = {
 			}
 		},
 		postprocessRenderedBlock({ renderData }) {
-			// Popups ship in the static HTML; keep their types and JSDoc out of search.
+			// The static HTML contains popups. Keep their types and JSDoc out of search results.
 			for (const node of selectAll(
 				".twoslash-popup-container, .twoslash-static-container, .twoslash-completion-container",
 				renderData.blockAst,
@@ -56,7 +58,7 @@ export const failOnTwoslashErrors = {
 	hooks: {
 		"astro:build:done": () => {
 			if (failedBlocks > 0) {
-				throw new Error(`${failedBlocks} twoslash code block(s) failed`);
+				throw new Error(`${failedBlocks} code blocks failed in twoslash`);
 			}
 		},
 	},

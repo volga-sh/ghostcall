@@ -1,16 +1,16 @@
 ---
 title: aggregateDecodedCalls
-description: Describe ABI calls once and receive typed decoded results.
+description: Supply ABI calls and get decoded results with inferred types.
 ---
 
 `aggregateDecodedCalls()` sends one `eth_call` and returns one decoded value for
-each input call. Results keep the same order as the calls. Every call must
-succeed; a failed call throws `GhostcallSubcallError`.
+each input call. Results have the same order as the calls. A failed call throws
+`GhostcallSubcallError`.
 
 ## ABI calls
 
-Declare each ABI, function name, and argument list once. ghostcall uses ox to
-resolve that function, encode its arguments, and decode its result.
+Supply the ABI, function name, and arguments for each call. ghostcall uses ox
+to select the function. ox encodes the arguments and decodes the result.
 
 ```ts twoslash
 import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
@@ -26,8 +26,8 @@ const results = await aggregateDecodedCalls(client, [
 ]);
 ```
 
-Function names and arguments are checked against the ABI, so editors suggest
-the ABI's function names:
+The SDK compares function names and arguments with the ABI. Editors suggest
+function names from the ABI:
 
 ```ts twoslash
 import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
@@ -40,26 +40,27 @@ await aggregateDecodedCalls(client, [
 ]);
 ```
 
-`args` is required when the chosen function has inputs; zero-input functions
-may omit it or use `args: []`. No return-type annotations or casts are needed.
+You must supply `args` if the function has inputs. If the function has no
+inputs, you do not need `args`. You can also use `args: []`. You do not need
+type annotations or type casts for the results.
 
-Use literal JSON ABIs with `as const`, viem's `parseAbi`, or ox's `Abi.from` to
-retain type inference. A broadly typed ABI loaded at runtime produces `unknown`
-results and is validated during encoding.
+Use literal JSON ABIs with `as const` to keep type inference. You can also use
+`parseAbi` from viem or `Abi.from` from ox. An ABI with a general type gives
+`unknown` results. The SDK does a check of this ABI when it encodes the calls.
 
-Overloaded functions are resolved using the supplied arguments. Encoding and
-decoding use the same resolved function. If ox reports ambiguous overloads,
-pass an ABI containing the specific overload you intend to call.
+ox uses the supplied arguments to select an overloaded function. Encoding and
+decoding use the same function. If ox cannot select one overload, supply an ABI
+that contains only the necessary overload.
 
-One output becomes a scalar; multiple outputs form an ordered tuple. A function
-with no outputs returns `undefined`. These are ox's decoding conventions.
-ABI-decoded addresses are checksummed, including addresses inside tuples and
-arrays.
+ox decodes one output as a scalar. It decodes more than one output as a tuple
+in output order. A function without outputs returns `undefined`. ox adds
+checksums to decoded addresses. This includes addresses in tuples and arrays.
 
 ## Raw calls with custom decoders
 
-Already-encoded calldata remains supported. Supply `data` and `decodeResult`
-for those entries. Raw and ABI-described entries can share a batch:
+You can use calldata that you have already encoded. Supply `data` and
+`decodeResult` for these entries. One batch can contain raw entries and ABI
+entries:
 
 ```ts twoslash
 import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
@@ -77,30 +78,34 @@ const results = await aggregateDecodedCalls(client, [
 ]);
 ```
 
-A custom decoder receives `(returnData, index)`: the successful call's return
-data and its zero-based position. Its return type determines that
-position's result type. Decoder errors pass through unchanged.
+A custom decoder receives `(returnData, index)`. These arguments contain the
+return data and the position of the call with `success: true`. The first position is
+zero. The decoder return type sets the result type for that position. Decoder
+errors do not change.
 
-Each entry uses either ABI fields or raw calldata with a decoder. TypeScript
-rejects entries mixing these fields, and neither form accepts `allowFailure`.
-Use [`aggregateCalls()`](/api/aggregate-calls/) for raw `{ to, data }` calls and
-optional failures.
+Each entry uses ABI fields or raw calldata with a decoder. TypeScript rejects
+entries that mix these fields. You cannot use `allowFailure` in either form.
+Use [`aggregateCalls()`](/api/aggregate-calls/) for raw `{ to, data }` calls if
+some calls can fail.
 
 ## Provider and options
 
-The provider and [options](/api/types/) match
+The provider and [options](/api/types/) are the same as for
 [`aggregateCalls()`](/api/aggregate-calls/#block-sender-and-gas). Subcalls use
-zero-value `CALL`, so non-view functions may change simulated state for later
-calls in the batch.
+`CALL` with zero value. Functions without the `view` restriction can change
+the simulated state. Later calls in the batch can read that state.
 
 ## Errors
 
-- ABI resolution and encoding errors occur before RPC. ox errors pass through.
+- ABI selection and encoding errors occur before the RPC request. ox errors
+  do not change.
 - Invalid addresses, calldata, or provider responses throw `TypeError`.
-- Requests exceeding a protocol or configured size limit throw `RangeError`.
+- Requests larger than a protocol limit or a size limit from the options throw
+  `RangeError`.
 - Failed calls throw [`GhostcallSubcallError`](/api/subcall-error/), including
   their raw revert data.
-- A response with a different entry count throws `Error`.
+- A response with a different number of entries throws `Error`.
 
-Provider, transport, and result-decoding errors pass through unchanged. For ABI
-calls, a subcall error's `call` field contains the prepared raw calldata.
+The SDK does not change provider, transport, or decoding errors. For ABI
+calls, the `call` field in a subcall error contains the raw calldata that the
+SDK prepared.

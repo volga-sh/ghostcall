@@ -10,7 +10,10 @@ const defaultSender = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 
 type Transport = RpcTransport.Http<false>;
 
-/** Start anvil on an OS-assigned port and resolve once it is listening. */
+/**
+ * Start anvil on a port that the OS selects.
+ * Return the transport when anvil listens on the port.
+ */
 async function startAnvil(
 	args: readonly string[] = [],
 ): Promise<{ child: ChildProcess; transport: Transport }> {
@@ -22,7 +25,7 @@ async function startAnvil(
 	let logs = "";
 	const listening = Promise.withResolvers<string>();
 	for (const stream of [child.stdout, child.stderr]) {
-		// Keep draining both pipes so anvil never blocks on a full log buffer.
+		// Read both pipes so a full log buffer cannot stop anvil.
 		stream.on("data", (chunk: Buffer) => {
 			logs += chunk.toString();
 			const address = /Listening on (\S+)/.exec(logs)?.[1];
@@ -49,7 +52,8 @@ async function startAnvil(
 	}
 }
 
-// Anvil state is disposable, so there is nothing to shut down gracefully.
+// Anvil stores temporary state.
+// Stop it without a shutdown procedure.
 async function stopAnvil(child: ChildProcess): Promise<void> {
 	if (child.exitCode !== null || child.signalCode !== null) return;
 	const exit = once(child, "exit");
@@ -83,7 +87,8 @@ async function sendTransaction(
 		],
 	});
 
-	// Anvil mines after returning the hash, so poll briefly for the receipt.
+	// Anvil returns the hash before it mines the transaction.
+	// Wait for the receipt before you continue.
 	let receipt: TransactionReceipt.Rpc | null = null;
 	for (let attempt = 0; receipt === null && attempt < 1_000; attempt += 1) {
 		if (attempt > 0) await sleep(10);
