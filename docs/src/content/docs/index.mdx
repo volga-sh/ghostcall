@@ -69,11 +69,12 @@ Batching reads normally means deploying a Multicall contract and routing every
 read through it. ghostcall removes that dependency by using a step the EVM
 already performs: contract creation.
 
-An `eth_call` without a `to` address makes the EVM treat its `data` as initcode,
-the code that runs once when a contract is created. Initcode normally ends by
-returning the runtime bytecode to store onchain. ghostcall returns batch results
-instead. Its 77-byte program reads the call entries appended after its own bytes,
-runs each one in order, and returns a packed result entry per call.
+If an `eth_call` has no `to` address, the EVM executes its `data` as initcode.
+Initcode is the code that executes one time when a contract is created. The
+initcode of a contract returns the runtime bytecode that the chain keeps.
+ghostcall returns the batch results instead. Its 61-byte program reads the call
+entries after its own bytes. It executes each call in order and returns one
+packed result for each call.
 
 Because `eth_call` only simulates execution, no contract is deployed and no state
 change is saved.

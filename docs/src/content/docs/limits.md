@@ -3,31 +3,36 @@ title: Limits
 description: Size limits for ghostcall calls, requests, and responses.
 ---
 
-Check these limits when building large batches. A chain or RPC provider may set
-a lower limit than the protocol.
+Use these limits for large batches. A chain or an RPC provider can set a lower
+limit than the protocol.
 
 ## Calldata per call
 
-Each call stores its calldata length in two bytes. One call can contain at most
-`65,535` bytes of calldata.
+Each entry keeps its calldata length in 2 bytes. Thus the maximum calldata for
+one call is `65,535` bytes.
 
-`encodeCalls()` rejects larger values before sending an RPC request.
+If a call has more calldata, `encodeCalls()` throws a `RangeError`. The SDK does
+not send an RPC request.
 
 ## Full request
 
-The request data contains the ghostcall program and every encoded call:
+The request data contains the ghostcall program and all of the encoded calls:
 
 ```text
 <ghostcall program><encoded calls>
 ```
 
-Ethereum limits contract creation code to `49,152` bytes under EIP-3860. Other
-chains may use another limit, and RPC providers may reject smaller requests.
+On Ethereum, EIP-3860 sets a limit of `49,152` bytes for contract creation code.
+Other chains can use a different limit. An RPC provider can also have a lower
+limit.
 
-The bundled ghostcall program is currently `77` bytes.
+The bundled ghostcall program has `61` bytes.
 
-`encodeCalls()` uses `49,152` as its default limit. Pass `maxInitcodeBytes` to
-set a different ceiling:
+A request must contain one or more calls. For an empty list of calls,
+`encodeCalls()` throws a `RangeError`.
+
+`encodeCalls()` uses `49,152` bytes as the default limit. To set a different
+limit, use `maxInitcodeBytes`:
 
 ```ts twoslash
 import { encodeCalls, type GhostcallCall } from "@volga-sh/evm-ghostcall";
@@ -40,30 +45,32 @@ const data = encodeCalls(calls, {
 
 ## Return data per call
 
-Each result stores its return-data length in 15 bits. One result can contain at
-most `32,767` bytes.
+Each result keeps its return data length in 15 bits. Thus the maximum return
+data for one result is `32,767` bytes.
 
-The ghostcall program reverts with empty data when a call exceeds this limit.
+If a call returns more bytes, the full `eth_call` stops with an error. The error
+has no revert data.
 
 ## Full response
 
-Ethereum normally limits returned contract code to `24,576` bytes under
-EIP-170. A CREATE-style `eth_call` treats the ghostcall response as would-be
-contract code, so this limit often applies to the full response, including the
-two-byte header for every result.
+On Ethereum, EIP-170 sets a limit of `24,576` bytes for returned contract code.
+A CREATE-style `eth_call` uses the ghostcall response as contract code. Thus a
+node can use this limit for the full response, with the 2-byte header of each
+result.
 
-Other chains and RPC providers may accept more or less. Test the application's
-endpoint.
+Other chains and RPC providers can have a higher or a lower limit. Do a test of
+the endpoint that your application uses.
 
 ## Test an endpoint
 
-The repository includes a script that probes request and response limits:
+The repository has a script that finds the request and response limits of an
+endpoint:
 
 ```sh
 npm run benchmark:limits -- --rpc-url "$RPC_URL" --mode raw
 ```
 
-Test a realistic ERC-20 balance workload with:
+To do a test with ERC-20 balance calls, use this command:
 
 ```sh
 npm run benchmark:limits -- \
@@ -73,10 +80,11 @@ npm run benchmark:limits -- \
   --owner "$OWNER_ADDRESS"
 ```
 
-Run the script with `--help` to see block, sender, gas, timeout, search ceiling,
-and JSON output options.
+To see the options for the block, the sender, the gas, the timeout, the search
+maximum, and the JSON output, use `--help`.
 
 ## Next
 
-- Use [`encodeCalls()`](/api/encode-calls/) to set the request-size ceiling.
-- Read the [Protocol](/protocol/) for the length fields behind these limits.
+- To set the maximum request size, use [`encodeCalls()`](/api/encode-calls/).
+- For the length fields that cause these limits, refer to the
+  [Protocol](/protocol/).

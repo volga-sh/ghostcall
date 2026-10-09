@@ -20,7 +20,10 @@ const abi = Abi.from([
 /** Pack successful return data as a ghostcall response. */
 function successResponse(...returnData: Hex[]): Hex {
 	return `0x${returnData
-		.map((data) => `${(0x8000 | hexSize(data)).toString(16)}${data.slice(2)}`)
+		.map(
+			(data) =>
+				`${(hexSize(data) * 2 + 1).toString(16).padStart(4, "0")}${data.slice(2)}`,
+		)
 		.join("")}`;
 }
 
@@ -102,7 +105,8 @@ test("invalid dynamic ABI calls fail before RPC", async (t) => {
 	];
 	for (const call of calls)
 		await assert.rejects(aggregateDecodedCalls({ request }, [call]));
-	// Resolving a repeated function once must not skip per-call argument checks.
+	// The SDK resolves a repeated function one time. It must also do a check of
+	// the arguments of each call.
 	const balanceOf = { to, abi, functionName: "balanceOf", args: [to] } as const;
 	for (const call of calls)
 		await assert.rejects(aggregateDecodedCalls({ request }, [balanceOf, call]));
@@ -111,7 +115,7 @@ test("invalid dynamic ABI calls fail before RPC", async (t) => {
 
 test("ABI subcall failures expose the executed calldata and raw revert data", async () => {
 	await assert.rejects(
-		aggregateDecodedCalls({ request: async () => "0x0004deadbeef" }, [
+		aggregateDecodedCalls({ request: async () => "0x0008deadbeef" }, [
 			{ to, abi, functionName: "totalSupply" },
 		]),
 		(error: unknown) => {
