@@ -58,6 +58,53 @@ with no outputs returns `undefined`. These are ox's decoding conventions.
 ABI-decoded addresses are checksummed, including addresses inside tuples and
 arrays.
 
+## Calls built from a list
+
+To call one function for every item in a list, map the list into calls and mark
+each returned object with `satisfies GhostcallAbiCall<typeof abi>`:
+
+```ts twoslash
+import {
+    aggregateDecodedCalls,
+    type GhostcallAbiCall,
+    type Hex,
+} from "@volga-sh/evm-ghostcall";
+import { erc20Abi } from "viem";
+
+const tokens: Hex[] = [
+    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+];
+const owner = "0x28C6c06298d514Db089934071355E5743bf21d60";
+
+const calls = tokens.map((token) => ({
+    to: token,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: [owner],
+}) satisfies GhostcallAbiCall<typeof erc20Abi>);
+
+const balances = await aggregateDecodedCalls(client, calls);
+```
+
+`balances` is a `bigint[]`, not a tuple: `.map` returns an array, so TypeScript
+does not track individual positions. Results still follow call order, so
+`balances[i]` is `owner`'s balance of `tokens[i]`. Spread mapped calls into a
+literal list to mix them with fixed calls; the fixed positions keep their own
+types.
+
+`satisfies` checks each call against the ABI inside the callback, so editors
+suggest function names there and report a misspelled name or wrong argument
+where it is written. `as const` on the returned object also infers `bigint[]`,
+but checks the calls only when the batch reaches `aggregateDecodedCalls()`.
+
+Without either, the batch fails to compile. TypeScript widens `functionName` in
+an object returned from `.map` to `string`, because `aggregateDecodedCalls()`
+cannot name the functions of an ABI it has not seen yet. Annotating the
+callback's return type as `GhostcallAbiCall<typeof erc20Abi>` compiles, but that
+type covers every function in the ABI, so each result widens to the union of
+all their result types.
+
 ## Raw calls with custom decoders
 
 Already-encoded calldata remains supported. Supply `data` and `decodeResult`
