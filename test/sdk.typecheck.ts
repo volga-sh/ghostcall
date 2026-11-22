@@ -169,6 +169,23 @@ async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 	aggregateDecodedCalls(provider, [failureAllowed]);
 }
 
+async function checkSharedNames(provider: GhostcallProvider): Promise<void> {
+	// An event or error that shares a function's name is not an overload of it.
+	const abi = Abi.from([
+		"event supply(uint256 amount)",
+		"function supply() view returns (uint256)",
+		"function lookup() view returns (uint8)",
+		"function lookup(address owner) view returns (string)",
+		"error lookup(bool flag)",
+	]);
+	const results = await aggregateDecodedCalls(provider, [
+		{ to, abi, functionName: "supply" },
+		{ to, abi, functionName: "lookup" },
+		{ to, abi, functionName: "lookup", args: [to] },
+	]);
+	assertType<Equal<typeof results, [bigint, number, string]>>();
+}
+
 async function checkDynamicAbi(
 	provider: GhostcallProvider,
 	abi: Abi.Abi,
@@ -179,4 +196,4 @@ async function checkDynamicAbi(
 	assertType<Equal<typeof results, [unknown]>>();
 }
 
-void [checkDecodedTypes, checkDynamicAbi];
+void [checkDecodedTypes, checkSharedNames, checkDynamicAbi];

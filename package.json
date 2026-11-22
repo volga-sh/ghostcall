@@ -4,7 +4,7 @@
 	"description": "Batch EVM contract reads without deploying a Multicall contract.",
 	"license": "MIT",
 	"type": "module",
-	"packageManager": "npm@12.1.0",
+	"packageManager": "npm@12.2.3",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/volga-sh/ghostcall.git"
@@ -52,9 +52,9 @@
 		"ox": "^1.8.3"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.5.14",
+		"@biomejs/biome": "2.6.8",
 		"@safe-global/mock-contract": "4.1.0",
-		"@types/node": "24.19.1",
+		"@types/node": "26.6.6",
 		"typescript": "7.0.2"
 	}
 }
