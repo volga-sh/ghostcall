@@ -4,8 +4,9 @@ description: Describe ABI calls once and receive typed decoded results.
 ---
 
 `aggregateDecodedCalls()` sends one `eth_call` and returns one decoded value for
-each input call. Results keep the same order as the calls. Every call must
-succeed; a failed call throws `GhostcallSubcallError`.
+each input call. Results keep the same order as the calls. If a call fails or
+its result cannot be decoded, `aggregateDecodedCalls()` throws
+`GhostcallSubcallError` for the first such call.
 
 ## ABI calls
 
@@ -81,7 +82,9 @@ const results = await aggregateDecodedCalls(client, [
 
 A custom decoder receives `(returnData, index)`: the successful call's return
 data and its zero-based position. Its return type determines that
-position's result type. Decoder errors pass through unchanged.
+position's result type. If the decoder throws, `aggregateDecodedCalls()` throws
+a `GhostcallSubcallError` with `kind: "decode"` and the decoder's error as
+`cause`.
 
 Each entry uses either ABI fields or raw calldata with a decoder. TypeScript
 rejects entries mixing these fields, and neither form accepts `allowFailure`.
@@ -97,12 +100,15 @@ calls in the batch.
 
 ## Errors
 
-- ABI resolution and encoding errors occur before RPC. ox errors pass through.
+- ABI resolution and encoding errors, including ox's, are thrown before the RPC
+  request.
 - Invalid addresses, calldata, or provider responses throw `TypeError`.
 - Requests exceeding a protocol or configured size limit throw `RangeError`.
-- Failed calls throw [`GhostcallSubcallError`](/api/subcall-error/), including
-  their raw revert data.
+- A failed call throws [`GhostcallSubcallError`](/api/subcall-error/) with
+  `kind: "call"` and its revert data.
+- A result that cannot be decoded throws `GhostcallSubcallError` with
+  `kind: "decode"` and the decoder's error as `cause`. For example, a call to
+  an address without code returns `0x`, which is not a valid `uint256`.
 - A response with a different entry count throws `Error`.
 
-Provider, transport, and result-decoding errors pass through unchanged. For ABI
-calls, a subcall error's `call` field contains the prepared raw calldata.
+Provider and transport errors pass through unchanged.

@@ -83,17 +83,47 @@ type GhostcallProvider = {
 	request(args: { method: string; params?: unknown }): Promise<unknown>;
 };
 
-/** A disallowed failure, with its zero-based index, executed call, and revert data. */
+/** Why a call made the batch throw. A decoder may throw any value, even undefined. */
+type GhostcallSubcallErrorDetails =
+	| { kind: "call"; index: number; call: GhostcallCall; returnData: Hex }
+	| {
+			kind: "decode";
+			index: number;
+			call: GhostcallCall;
+			returnData: Hex;
+			cause: unknown;
+	  };
+
+/**
+ * A call that made the batch throw. `kind` says why:
+ * - `"call"`: the call failed (revert, out of gas, invalid opcode). `returnData` is its revert data.
+ * - `"decode"`: the call succeeded, but its decoder threw on `returnData`. `cause` is the thrown value.
+ */
 class GhostcallSubcallError extends Error {
+	/** Zero-based position of the call in the batch. */
 	readonly index: number;
+	/** The entry that ran. For ABI calls: the target and encoded calldata. */
 	readonly call: GhostcallCall;
+	/** `"call"` if the call failed; `"decode"` if it succeeded and its decoder threw. */
+	readonly kind: "call" | "decode";
+	/** Revert data for `"call"`; the return data the decoder rejected for `"decode"`. */
 	readonly returnData: Hex;
 
-	constructor(index: number, call: GhostcallCall, returnData: Hex) {
-		super(`ghostcall subcall ${index} failed`);
+	// `cause` is not redeclared as a field: under ESNext class-field semantics a
+	// field declaration would overwrite the value that super() stores.
+	constructor(details: GhostcallSubcallErrorDetails) {
+		const { index, call, kind, returnData } = details;
+		const subcall = `ghostcall subcall ${index} to ${call.to}`;
+		super(
+			kind === "call"
+				? `${subcall} failed`
+				: `${subcall} succeeded, but its result could not be decoded`,
+			details.kind === "decode" ? { cause: details.cause } : undefined,
+		);
 		this.name = "GhostcallSubcallError";
 		this.index = index;
 		this.call = call;
+		this.kind = kind;
 		this.returnData = returnData;
 	}
 }
@@ -150,8 +180,8 @@ function encodeCalls(
 }
 
 /**
- * Execute a raw batch in order. Failed calls throw GhostcallSubcallError unless
- * their entry sets allowFailure. Provider errors pass through unchanged.
+ * Execute a raw batch in order. Failed calls throw GhostcallSubcallError (kind "call")
+ * unless their entry sets allowFailure. Provider errors pass through unchanged.
  */
 async function aggregateCalls(
 	provider: GhostcallProvider,
@@ -163,7 +193,12 @@ async function aggregateCalls(
 	for (const { success, returnData } of results) {
 		const call = calls[index] as GhostcallCall;
 		if (!success && !call.allowFailure) {
-			throw new GhostcallSubcallError(index, call, returnData);
+			throw new GhostcallSubcallError({
+				kind: "call",
+				index,
+				call,
+				returnData,
+			});
 		}
 		index += 1;
 	}
@@ -172,7 +207,9 @@ async function aggregateCalls(
 
 /**
  * Execute ABI-described calls or raw calls with custom decoders. Each tuple position
- * retains its result type. Any failed call throws; encoding/decoding errors pass through.
+ * retains its result type. The first call that fails or cannot be decoded throws
+ * GhostcallSubcallError, whose `kind` says which; a decoder's error becomes its `cause`.
+ * Provider errors pass through.
  * ABI-decoded addresses are checksummed, including addresses nested in tuples or arrays.
  */
 async function aggregateDecodedCalls<
@@ -186,8 +223,26 @@ async function aggregateDecodedCalls<
 	const results = await executeCalls(provider, preparedCalls, options);
 	return results.map(({ success, returnData }, index) => {
 		const call = preparedCalls[index] as GhostcallDecodedCall;
-		if (!success) throw new GhostcallSubcallError(index, call, returnData);
-		return call.decodeResult(returnData, index);
+		if (!success) {
+			throw new GhostcallSubcallError({
+				kind: "call",
+				index,
+				call,
+				returnData,
+			});
+		}
+		try {
+			return call.decodeResult(returnData, index);
+		} catch (cause) {
+			// Decoder errors such as ox's ZeroDataError do not say which call failed.
+			throw new GhostcallSubcallError({
+				kind: "decode",
+				index,
+				call,
+				returnData,
+				cause,
+			});
+		}
 	}) as GhostcallDecodedResults<TCalls>;
 }
 

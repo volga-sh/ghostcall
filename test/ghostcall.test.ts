@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AbiError, AbiFunction } from "ox";
+import { AbiError, AbiFunction, AbiParameters } from "ox";
 import {
 	aggregateCalls,
 	aggregateDecodedCalls,
@@ -13,6 +13,9 @@ import { setupMock } from "./support/mock.ts";
 test("ghostcall integration", async (t) => {
 	const { transport, to, write } = await setupMock(t);
 	t.beforeEach(() => write("reset"));
+	const balance = AbiFunction.from(
+		"function balanceOf(address) view returns (uint256)",
+	);
 
 	await t.test(
 		"preserves revert data and continues to later calls",
@@ -26,10 +29,11 @@ test("ghostcall integration", async (t) => {
 				{ to, data: "0x11111111" },
 				{ to, data: "0x22222222" },
 			] as const;
-			await assert.rejects(
-				aggregateCalls(transport, calls),
-				GhostcallSubcallError,
-			);
+			await assert.rejects(aggregateCalls(transport, calls), {
+				name: "GhostcallSubcallError",
+				kind: "call",
+				index: 0,
+			});
 			const [failure, success] = await aggregateCalls(transport, [
 				{ ...calls[0], allowFailure: true },
 				calls[1],
@@ -61,9 +65,6 @@ test("ghostcall integration", async (t) => {
 	await t.test(
 		"CALL exposes same-batch state changes to later calls",
 		async () => {
-			const balance = AbiFunction.from(
-				"function balanceOf(address) view returns (uint256)",
-			);
 			const count = AbiFunction.from(
 				"function invocationCount() returns (uint256)",
 			);
@@ -77,6 +78,31 @@ test("ghostcall integration", async (t) => {
 					{ to, abi: [count], functionName: "invocationCount" },
 				]),
 				[123n, 1n],
+			);
+		},
+	);
+
+	await t.test(
+		"identifies a call to an address without code whose empty result cannot be ABI-decoded",
+		async () => {
+			// CALL to an address without code succeeds and returns no data.
+			const codeless = "0x000000000000000000000000000000000000dEaD";
+			const calls = [
+				{ to, abi: [balance], functionName: "balanceOf", args: [to] },
+				{ to: codeless, abi: [balance], functionName: "balanceOf", args: [to] },
+			] as const;
+			await assert.rejects(
+				aggregateDecodedCalls(transport, calls),
+				(error: unknown) => {
+					assert.ok(error instanceof GhostcallSubcallError);
+					assert.equal(error.kind, "decode");
+					assert.equal(error.index, 1);
+					assert.equal(error.call.to, codeless);
+					assert.equal(error.call.data, AbiFunction.encodeData(balance, [to]));
+					assert.equal(error.returnData, "0x");
+					assert.ok(error.cause instanceof AbiParameters.ZeroDataError);
+					return true;
+				},
 			);
 		},
 	);
