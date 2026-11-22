@@ -204,6 +204,31 @@ test("decoder throws become GhostcallSubcallError with the call index and the th
 	}
 });
 
+test("the first failed or undecodable call is reported and later decoders do not run", async (t) => {
+	const decode = t.mock.fn((data: Hex) => data);
+	const reject = t.mock.fn((): never => {
+		throw new Error("unexpected data");
+	});
+	const calls = [
+		{ ...call, decodeResult: decode },
+		{ ...call, decodeResult: reject },
+		{ ...call, decodeResult: decode },
+	];
+	// Call 1 cannot be decoded and call 2 reverted: call 1 is reported.
+	await assert.rejects(
+		aggregateDecodedCalls(providerReturning("0x0003aa0003bb0002cc"), calls),
+		/subcall 1 result could not be decoded/,
+	);
+	assert.equal(decode.mock.callCount(), 1);
+	// Call 0 reverted: it is reported before any decoder runs.
+	await assert.rejects(
+		aggregateDecodedCalls(providerReturning("0x0002aa0003bb0003cc"), calls),
+		/subcall 0 failed/,
+	);
+	assert.equal(decode.mock.callCount(), 1);
+	assert.equal(reject.mock.callCount(), 1);
+});
+
 test("rejects non-hex provider responses and mismatched result counts", async () => {
 	await assert.rejects(
 		aggregateCalls(providerReturning(123), [call]),

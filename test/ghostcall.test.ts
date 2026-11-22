@@ -13,6 +13,9 @@ import { setupMock } from "./support/mock.ts";
 test("ghostcall integration", async (t) => {
 	const { transport, to, write } = await setupMock(t);
 	t.beforeEach(() => write("reset"));
+	const balance = AbiFunction.from(
+		"function balanceOf(address) view returns (uint256)",
+	);
 
 	await t.test(
 		"preserves revert data and continues to later calls",
@@ -61,9 +64,6 @@ test("ghostcall integration", async (t) => {
 	await t.test(
 		"CALL exposes same-batch state changes to later calls",
 		async () => {
-			const balance = AbiFunction.from(
-				"function balanceOf(address) view returns (uint256)",
-			);
 			const count = AbiFunction.from(
 				"function invocationCount() returns (uint256)",
 			);
@@ -84,13 +84,6 @@ test("ghostcall integration", async (t) => {
 	await t.test(
 		"identifies a call to an address without code whose empty result cannot be ABI-decoded",
 		async () => {
-			const balance = AbiFunction.from(
-				"function balanceOf(address) view returns (uint256)",
-			);
-			await write("givenMethodReturn", [
-				AbiFunction.encodeData(balance, [to]),
-				AbiFunction.encodeResult(balance, 123n),
-			]);
 			// CALL to an address without code succeeds and returns no data.
 			const codeless = "0x000000000000000000000000000000000000dEaD";
 			const calls = [
@@ -101,6 +94,10 @@ test("ghostcall integration", async (t) => {
 				aggregateDecodedCalls(transport, calls),
 				(error: unknown) => {
 					assert.ok(error instanceof GhostcallSubcallError);
+					assert.equal(
+						error.message,
+						"ghostcall subcall 1 result could not be decoded",
+					);
 					assert.equal(error.index, 1);
 					assert.equal(error.call.to, codeless);
 					assert.equal(error.call.data, AbiFunction.encodeData(balance, [to]));

@@ -52,9 +52,8 @@ Function names and argument types are checked against the ABI. Use a literal
 ABI (`as const`), viem's `parseAbi`, or ox's `Abi.from` to preserve inference;
 ABIs loaded at runtime still work, but their results have type `unknown`.
 
-If either call fails or returns data that cannot be decoded,
-`aggregateDecodedCalls()` throws a [`GhostcallSubcallError`](/api/subcall-error/)
-that identifies the call.
+If either call fails or its result cannot be decoded, `aggregateDecodedCalls()`
+throws a [`GhostcallSubcallError`](/api/subcall-error/) that identifies the call.
 
 ## Next
 

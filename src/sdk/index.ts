@@ -84,9 +84,8 @@ type GhostcallProvider = {
 };
 
 /**
- * A subcall that failed without allowFailure, or whose successful result its
- * decoder rejected. Carries the zero-based index, executed call, and return data.
- * Only decoding failures set `cause`, to the decoder's original error.
+ * Identifies the call that made a batch throw: it failed, or its result could not
+ * be decoded. `cause` holds the decoder's error and is set only for decoding failures.
  */
 class GhostcallSubcallError extends Error {
 	readonly index: number;
@@ -186,8 +185,8 @@ async function aggregateCalls(
 
 /**
  * Execute ABI-described calls or raw calls with custom decoders. Each tuple position
- * retains its result type. A failed call, or a decoder that throws, throws
- * GhostcallSubcallError; decoder errors become its `cause`. Encoding errors pass through.
+ * retains its result type. The first call that fails or cannot be decoded throws
+ * GhostcallSubcallError, with any decoder error as its `cause`. Provider errors pass through.
  * ABI-decoded addresses are checksummed, including addresses nested in tuples or arrays.
  */
 async function aggregateDecodedCalls<
