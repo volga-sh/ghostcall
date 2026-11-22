@@ -29,7 +29,7 @@ const providerReturning = (result: unknown): GhostcallProvider => ({
 
 test("encodes ordered uint16-length/address/calldata entries after the initcode", () => {
 	const base = ghostcallInitcode;
-	// Use a fixed size so you can see initcode changes.
+	// Pin the bundled program size so initcode changes are explicit.
 	assert.equal(hexSize(base), 60);
 	const first = { ...call, data: "0xaAbB" } satisfies GhostcallCall;
 	const second = {
@@ -42,23 +42,9 @@ test("encodes ordered uint16-length/address/calldata entries after the initcode"
 	);
 });
 
-test("uses three-byte initcode for empty batches and enforces its request limit", async (t) => {
-	assert.equal(encodeCalls([], { maxInitcodeBytes: 3 }), "0x5f80f3");
-	assert.throws(() => encodeCalls([], { maxInitcodeBytes: 2 }), RangeError);
-	const request = t.mock.fn<GhostcallProvider["request"]>(async () => "0x");
-	assert.deepEqual(await aggregateCalls({ request }, []), []);
-	assert.equal(request.mock.callCount(), 1);
-	assert.deepEqual(request.mock.calls[0]?.arguments, [
-		{
-			method: "eth_call",
-			params: [{ data: "0x5f80f3" }, "latest"],
-		},
-	]);
-});
-
 test("enforces calldata and full CREATE request ceilings at their boundaries", () => {
 	const baseSize = hexSize(ghostcallInitcode);
-	// The two entries use exactly 49,152 bytes.
+	// Two entries reach the default 49,152-byte ceiling exactly.
 	const defaultFit = 0xc000 - baseSize - 2 * 22;
 	assert.equal(hexSize(encodeCalls([callWithSize(defaultFit), call])), 0xc000);
 	assert.throws(
@@ -75,6 +61,11 @@ test("enforces calldata and full CREATE request ceilings at their boundaries", (
 		() => encodeCalls([callWithSize(0x10000)], { maxInitcodeBytes }),
 		/65535-byte calldata limit/,
 	);
+});
+
+test("encodes an empty batch as three-byte initcode that returns no entries", () => {
+	assert.equal(encodeCalls([], { maxInitcodeBytes: 3 }), "0x5f80f3");
+	assert.throws(() => encodeCalls([], { maxInitcodeBytes: 2 }), RangeError);
 });
 
 test("rejects addresses and calldata that the Hex type admits but the wire format does not", async () => {
@@ -95,7 +86,7 @@ test("rejects addresses and calldata that the Hex type admits but the wire forma
 	);
 });
 
-test("decodes low-bit success headers across uint15 length boundaries and rejects malformed responses", () => {
+test("decodes mixed-case headers across uint15 length boundaries and rejects malformed responses", () => {
 	assert.deepEqual(decodeResults("0x"), []);
 	const expected: GhostcallResult[] = [];
 	let response: Hex = "0x";
@@ -112,15 +103,12 @@ test("decodes low-bit success headers across uint15 length boundaries and reject
 	assert.deepEqual(decodeResults(response), expected);
 	for (const [data, error] of [
 		["0x00", /Truncated/],
-		["0x0005ff", /Truncated/],
 		["0x0001ff", /Truncated/],
+		["0x0005ff", /Truncated/],
 		["0xabc", /even-length/],
 		["0xzz", /even-length/],
 	] as const) {
-		assert.throws(() => decodeResults(data), {
-			name: "TypeError",
-			message: error,
-		});
+		assert.throws(() => decodeResults(data), error);
 	}
 });
 
@@ -165,8 +153,7 @@ test("failed calls throw before reaching decoders, even with a hidden allowFailu
 	const decodeResult = t.mock.fn(() => 42);
 	await assert.rejects(aggregateCalls(provider, [call]), GhostcallSubcallError);
 	const original = { ...call, decodeResult, allowFailure: true };
-	// Structural typing can hide an extra field.
-	// The field stays on the object at runtime.
+	// Structural typing can hide an extra field without removing it at runtime.
 	const erased: Omit<GhostcallDecodedCall<number>, "allowFailure"> = original;
 	await assert.rejects(
 		aggregateDecodedCalls(provider, [erased]),

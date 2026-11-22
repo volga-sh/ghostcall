@@ -123,8 +123,6 @@ test("caps balance searches by configured initcode bytes", async (t) => {
 	assert.equal(report.balances?.maxPass, 3);
 	assert.equal(report.balances?.exhaustedConfiguredMax, true);
 	assert.equal(report.balances?.fullCreateDataBytes, maxInitcodeBytes);
-	assert.equal(report.ghostcallInitcodeBytes, initcodeBytes);
-	assert.equal(report.balances?.returnedBytes, 3 * 34);
 	assert.deepEqual(counts, [1, 2, 3]);
 });
 

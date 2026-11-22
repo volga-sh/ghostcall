@@ -10,10 +10,7 @@ import {
 	type Transport,
 } from "./anvil.ts";
 
-/**
- * Start an isolated chain and deploy the mock contract.
- * Wait for the receipt after each write.
- */
+/** Start an isolated chain and deploy the real mock contract; writes wait for receipts. */
 async function setupMock(
 	t: TestContext,
 	codeSizeLimit?: number,

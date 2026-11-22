@@ -27,7 +27,7 @@ type Equal<A, B> =
 		? true
 		: false;
 
-/** The compiler returns an error unless the type argument is `true`. */
+/** Fails to compile unless its type argument is `true`. */
 function assertType<_T extends true>(): void {}
 
 async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
@@ -106,7 +106,7 @@ async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 	// @ts-expect-error Events are not callable functions.
 	aggregateDecodedCalls(provider, [eventName]);
 	const missingArgs = { to, abi, functionName: "balanceOf" } as const;
-	// @ts-expect-error balanceOf must have its address argument.
+	// @ts-expect-error balanceOf requires its address argument.
 	aggregateDecodedCalls(provider, [missingArgs]);
 	const wrongArgs = {
 		to,
@@ -114,7 +114,7 @@ async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 		functionName: "balanceOf",
 		args: [123n],
 	} as const;
-	// @ts-expect-error The balanceOf argument must have the address type.
+	// @ts-expect-error balanceOf accepts an address, not a bigint.
 	aggregateDecodedCalls(provider, [wrongArgs]);
 	const extraArgs = {
 		to,
@@ -130,7 +130,7 @@ async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 		functionName: "lookup",
 		args: [true],
 	} as const;
-	// @ts-expect-error No lookup overload has a boolean argument.
+	// @ts-expect-error No lookup overload accepts a boolean.
 	aggregateDecodedCalls(provider, [wrongOverload]);
 	const invalidTuple = {
 		to,
@@ -138,7 +138,7 @@ async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 		functionName: "positions",
 		args: [[{ owner: to, amount: "1" }]],
 	} as const;
-	// @ts-expect-error Nested tuple fields keep their ABI types.
+	// @ts-expect-error Nested tuple fields retain their ABI types.
 	aggregateDecodedCalls(provider, [invalidTuple]);
 	const mixedFields = {
 		to,
@@ -146,7 +146,7 @@ async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 		functionName: "totalSupply",
 		data: "0x",
 	} as const;
-	// @ts-expect-error A call cannot contain both an ABI function and raw calldata.
+	// @ts-expect-error A call cannot specify both an ABI function and raw calldata.
 	aggregateDecodedCalls(provider, [mixedFields]);
 	const mixedDecoder = {
 		to,
@@ -154,10 +154,10 @@ async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 		functionName: "totalSupply",
 		decodeResult: () => 1,
 	} as const;
-	// @ts-expect-error ABI calls use the decoder from the ABI.
+	// @ts-expect-error The ABI determines the decoder for ABI calls.
 	aggregateDecodedCalls(provider, [mixedDecoder]);
 	const missingDecoder = { to, data: "0x" } as const;
-	// @ts-expect-error A decoder is necessary for decoded raw calls.
+	// @ts-expect-error Decoded raw calls require a decoder.
 	aggregateDecodedCalls(provider, [missingDecoder]);
 	const failureAllowed = {
 		to,
@@ -165,8 +165,25 @@ async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 		decodeResult: () => 1,
 		allowFailure: true,
 	} as const;
-	// @ts-expect-error An object in the decoded API cannot allow call failure.
+	// @ts-expect-error Reused objects cannot permit failure in the decoded API.
 	aggregateDecodedCalls(provider, [failureAllowed]);
+}
+
+async function checkSharedNames(provider: GhostcallProvider): Promise<void> {
+	// An event or error that shares a function's name is not an overload of it.
+	const abi = Abi.from([
+		"event supply(uint256 amount)",
+		"function supply() view returns (uint256)",
+		"function lookup() view returns (uint8)",
+		"function lookup(address owner) view returns (string)",
+		"error lookup(bool flag)",
+	]);
+	const results = await aggregateDecodedCalls(provider, [
+		{ to, abi, functionName: "supply" },
+		{ to, abi, functionName: "lookup" },
+		{ to, abi, functionName: "lookup", args: [to] },
+	]);
+	assertType<Equal<typeof results, [bigint, number, string]>>();
 }
 
 async function checkDynamicAbi(
@@ -179,4 +196,4 @@ async function checkDynamicAbi(
 	assertType<Equal<typeof results, [unknown]>>();
 }
 
-void [checkDecodedTypes, checkDynamicAbi];
+void [checkDecodedTypes, checkSharedNames, checkDynamicAbi];

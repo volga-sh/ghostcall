@@ -1,21 +1,20 @@
 ---
 title: Development
-description: Instructions for changes to the ghostcall repository.
+description: Build, test, and update the ghostcall repository.
 ---
 
-Run each command from the repository root.
+This page is for contributors working in the ghostcall repository. Run all
+commands from the repository root.
 
-Use the Node.js LTS version in `.nvmrc`.
-CI uses the same version.
-Use npm 12.1.0 and Foundry v1.8.3.
-`foundry.toml` sets Solidity 0.8.37.
-It also sets the Prague EVM target.
+Use the Node.js LTS release pinned in `.nvmrc` (CI uses the same pin), npm
+12.2.3, and Foundry v1.10.0. `foundry.toml` pins Solidity 0.8.39 and keeps the
+Prague EVM target for compatibility.
 
-## Install the project
+## Install and check the project
 
 ```sh
 nvm install
-npm install --global npm@12.1.0
+npm install --global npm@12.2.3
 npm ci
 npm run build:sdk
 npm run test
@@ -23,24 +22,21 @@ npm run typecheck
 npm run check
 ```
 
-`build:sdk` compiles the Yul program.
-It updates the initcode in the SDK.
-It does a type check of the SDK build.
+`build:sdk` compiles the Yul program, regenerates the bundled SDK initcode, and
+type-checks the SDK build.
 
-## Change the Yul program
+## Work on the Yul program
 
 ```sh
 npm run build:contracts
 npm run check:sdk:initcode
 ```
 
-`build:contracts` compiles `src/Ghostcall.yul`.
-It updates `src/sdk/generated/initcode.ts`.
-Do not edit the generated initcode file.
+`build:contracts` compiles `src/Ghostcall.yul` and regenerates
+`src/sdk/generated/initcode.ts`. Never edit the generated initcode file by hand.
 
-Run the full test suite after each Yul change.
-The integration tests start Anvil.
-They run the compiled program in a local EVM.
+After a Yul change, run the full test suite. The integration tests start Anvil
+and exercise the compiled program on a real local EVM.
 
 ## Measure SDK performance
 
@@ -48,17 +44,14 @@ They run the compiled program in a local EVM.
 npm run benchmark:sdk
 ```
 
-The benchmark measures the time to encode, decode, and batch calls.
-It does not use network requests.
-It gives median times for 1, 100, and 700 calls.
-It also gives estimates for memory allocation.
-These estimates include temporary objects that the garbage collector removes.
-The estimates count the bytes that each batch allocates.
-They do not give peak memory use or memory that the program keeps.
+The benchmark measures encoding, decoding, and batching without network latency.
+It reports median timings for 1, 100, and 700 calls and sampled allocation
+estimates, including temporary objects collected by GC. Allocation figures
+measure bytes allocated per batch, not peak or retained memory.
 
-Read [Limits](/limits/) to measure the request and response limits of an RPC endpoint.
+To probe an RPC endpoint's request and response limits, see [Limits](/limits/).
 
-## Change the docs
+## Work on the docs
 
 ```sh
 npm ci --prefix docs
@@ -67,45 +60,45 @@ npm run docs:build
 npm run docs:preview
 ```
 
-Documentation source files are in `docs/src`.
-The docs build writes its output to `docs/dist`.
+Documentation source files live in `docs/src`. The static build is written to
+`docs/dist`.
 
-The docs build does a type check of each `ts twoslash` block against `src/sdk`.
-These blocks show editor hover text.
-A type error stops the `docs:build` command.
-Examples can use the global `client` provider.
-Read the [twoslash syntax](https://twoslash.studiocms.dev/) for queries (`// ^?`) and hidden code (`// ---cut---`).
+Code blocks marked `ts twoslash` are type-checked against `src/sdk` and render
+editor hovers; a type error fails `docs:build`. Examples can use a global
+`client` provider. See the [twoslash syntax](https://twoslash.studiocms.dev/)
+for queries (`// ^?`) and hidden code (`// ---cut---`).
 
-Reference signatures and type definitions use queries on SDK imports.
-The docs get the declarations from the SDK.
-Do not keep separate declarations in the docs.
-Usage examples show types only in hover text.
-Do not add queries to usage examples.
+Reference signatures and type definitions use queries on SDK imports, so they
+follow the source without maintaining separate declarations or drift checks.
+Usage examples show types on hover only; do not add queries to them.
 
-The docs use TypeScript 5.9.
-twoslash uses the compiler API from that version.
-TypeScript 7 does not have this API.
-The docs have a peer dependency override for expressive-code-twoslash.
-The override uses the expressive-code version from Starlight.
-Update this override after a Starlight version change.
+`biome.json` turns off Biome's Markdown formatter, which would reindent those
+query lines.
 
-npm 12 does not run dependency installation scripts by default.
-`docs/package.json` lets npm run the specified esbuild installation script.
-fsevents uses its macOS binary.
-It does not build this binary during installation.
-Do a check of the esbuild approval after a version change.
-Update the approval if necessary.
+The docs pin TypeScript 5.9 because twoslash needs the compiler API that
+TypeScript 7 does not ship, and override expressive-code-twoslash's peer range
+to the expressive-code version Starlight installs. Update that override when
+upgrading Starlight.
 
-## Write comments and documentation
+npm 12 blocks dependency install scripts by default. `docs/package.json` denies
+the fsevents script, the only one in the docs dependency tree; fsevents uses
+its bundled macOS binary without rebuilding it. Review any new entry npm asks
+for when dependencies change.
 
-Use [ASD-STE100 Issue 9](https://www.asd-ste100.org/assets/files/ASD-STE100_ISSUE9.pdf) for comments and documentation.
-Use active voice.
-Put one instruction in each sentence.
-Use at most 20 words in a procedural sentence.
-Use at most 25 words in a descriptive sentence.
-Use approved words and established software terms.
-Do not use semicolons or contractions.
-Do not put more than three nouns together unless they make a technical term.
-Use the same term for the same item.
-Do a check of the language before you make a pull request.
-API names, file names, EVM instructions, and package names keep their official spelling.
+## Repository map
+
+- `src/Ghostcall.yul` contains the EVM program.
+- `src/sdk/index.ts` contains the public TypeScript API.
+- `src/sdk/abi.ts` turns ABI-described calls into raw calls with decoders.
+- `scripts/generate-sdk-initcode.ts` copies compiled initcode into the SDK.
+- `scripts/benchmark-sdk.ts` and `scripts/benchmark-limits.ts` measure SDK cost
+  and endpoint size limits.
+- `test/ghostcall.test.ts` tests program behavior against Anvil.
+- `test/sdk.test.ts` tests encoding, decoding, validation, and SDK failure
+  behavior.
+- `test/abi.test.ts` tests ABI call preparation, overloads, and decoding.
+- `test/sdk.typecheck.ts` pins inferred types; `npm run typecheck` checks it.
+- `test/benchmark-limits.test.ts` tests the limit benchmark script.
+
+When public behavior changes, update the implementation, generated initcode,
+tests, API comments, README, and docs in the same pull request.

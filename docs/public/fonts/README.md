@@ -1,10 +1,9 @@
-# Fonts on the documentation server
+# Self-hosted fonts
 
-The documentation server supplies the Latin subsets of Source Serif 4 and
-IBM Plex Mono.
+The docs site self-hosts Latin subsets of Source Serif 4 and IBM Plex Mono.
 
-Adobe owns the copyright for Source Serif 4. The font uses the
-SIL Open Font License 1.1.
+Source Serif 4 is copyright Adobe and distributed under the SIL Open Font
+License 1.1.
 
-IBM Corp. owns the copyright for IBM Plex. The font uses the
-SIL Open Font License 1.1.
+IBM Plex is copyright IBM Corp. and distributed under the SIL Open Font License
+1.1.

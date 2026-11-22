@@ -10,8 +10,7 @@ import type {
 	Hex,
 } from "../src/sdk/index.ts";
 
-// The optional module path selects the SDK for this measurement.
-// The SDK must use the same wire format as these fixtures.
+// An optional module path lets the same fixtures measure a previous SDK revision.
 const sdk: typeof import("../src/sdk/index.ts") = await import(
 	process.argv[2]
 		? pathToFileURL(resolve(process.argv[2])).href
@@ -41,9 +40,8 @@ async function measure(
 	}
 	samples.sort((a, b) => a - b);
 
-	// Measure allocations in an isolated run to keep profiler costs out of the time measurement.
-	// Include objects that the garbage collector removed.
-	// The remaining heap does not show all temporary allocations.
+	// Sample allocations separately so profiler overhead does not affect timing.
+	// Include collected objects: retained heap alone misses temporary allocations.
 	const session = new Session();
 	session.connect();
 	let allocatedBytes = 0;
@@ -68,9 +66,9 @@ async function measure(
 	);
 }
 
-console.log(`SDK benchmark (${process.version}, median of 7 runs)`);
+console.log(`SDK benchmark (${process.version}; median of 7 runs)`);
 console.log(
-	"Allocation values are estimates from sampling. They do not show the maximum heap size or the heap that remains.",
+	"Allocation figures are sampling estimates, not peak or retained heap.",
 );
 for (const count of [1, 100, 700]) {
 	const calls: GhostcallDecodedCall[] = Array.from({ length: count }, () => ({
@@ -90,7 +88,7 @@ for (const count of [1, 100, 700]) {
 	await measure(`encodeCalls (${count})`, iterations, (iterations) => {
 		for (let index = 0; index < iterations; index += 1) {
 			const data = sdk.encodeCalls(calls);
-			// Read the last byte to include the cost of string concatenation.
+			// Touch the final byte to include flattening deferred string concatenation.
 			checksum ^= data.charCodeAt(data.length - 1);
 		}
 	});
@@ -104,12 +102,12 @@ for (const count of [1, 100, 700]) {
 	];
 	const abiCases: [string, () => GhostcallAbiCall][] = [
 		["ABI", () => ({ to, abi, functionName: "balanceOf", args: [to] })],
-		// Use one function lookup for each call with an overloaded name.
+		// Overloaded names cannot share one resolution, so each call resolves its own.
 		[
 			"overloaded ABI",
 			() => ({ to, abi: overloadedAbi, functionName: "balanceOf", args: [to] }),
 		],
-		// The batch uses the ABI object as the cache key.
+		// Resolutions are shared per ABI object, so separate objects share nothing.
 		[
 			"per-call ABI",
 			() => ({

@@ -8,22 +8,22 @@ import {
 } from "./abi.ts";
 import { ghostcallInitcode } from "./generated/initcode.ts";
 
-/** The string has the `0x` prefix. */
+/** A 0x-prefixed string, validated at SDK wire boundaries. */
 type Hex = `0x${string}`;
 
-/** The encoder does not use the failure policy. */
+/** Raw calldata for one target. Encoding ignores the SDK-only failure policy. */
 type GhostcallCall = {
 	to: Hex;
-	/** The maximum calldata length is 65,535 bytes. The request stores a uint16 length. */
+	/** At most 65,535 bytes (the wire format stores a uint16 length). */
 	data: Hex;
-	/** If true, aggregateCalls returns entries with a failure status. The default value is false. */
+	/** Return failed entries from aggregateCalls instead of throwing. Default: false. */
 	allowFailure?: boolean;
 };
 
-/** The decoder receives return data only if the call returns a success status. */
+/** Raw calldata with a decoder that only receives successful return data. */
 type GhostcallDecodedCall<TResult = unknown> = {
 	to: Hex;
-	/** The maximum calldata length is 65,535 bytes. The request stores a uint16 length. */
+	/** At most 65,535 bytes (the wire format stores a uint16 length). */
 	data: Hex;
 	decodeResult: (returnData: Hex, index: number) => TResult;
 	abi?: never;
@@ -32,12 +32,12 @@ type GhostcallDecodedCall<TResult = unknown> = {
 	allowFailure?: never;
 };
 
-/** A call with a failure status stores its revert data in returnData. */
+/** One subcall result. Failed calls carry their revert data in returnData. */
 type GhostcallResult = { success: boolean; returnData: Hex };
 
 type GhostcallDecodedInput = GhostcallAbiCall | GhostcallDecodedCall;
 
-// Keep each result in its tuple position when the call types form a union.
+// Distribute over mixed call unions while retaining each tuple position.
 type ValidatedDecodedCall<TCall extends GhostcallDecodedInput> =
 	TCall extends GhostcallAbiCall ? GhostcallAbiCall<TCall["abi"]> : TCall;
 
@@ -58,16 +58,16 @@ type GhostcallDecodedResults<TCalls extends readonly GhostcallDecodedInput[]> =
 	};
 
 type GhostcallEncodeOptions = {
-	/** The full CREATE request with the initcode must not be larger than this limit. The default value is 49,152 bytes. */
+	/** Full CREATE request ceiling, including bundled initcode. Default: 49,152 bytes. */
 	maxInitcodeBytes?: number;
 };
 
 type GhostcallAggregateOptions = GhostcallEncodeOptions & {
-	/** These options control the outer eth_call for the full batch. */
+	/** Controls the outer eth_call, shared by the entire batch. */
 	ethCall?: {
 		from?: Hex;
 		gas?: bigint;
-		/** The default value is "latest". */
+		/** A block number or named tag. Default: "latest". */
 		blockTag?:
 			| bigint
 			| "latest"
@@ -78,15 +78,12 @@ type GhostcallAggregateOptions = GhostcallEncodeOptions & {
 	};
 };
 
-/** The provider has an EIP-1193 request method. */
+/** A provider with an EIP-1193-style request method, such as a viem client or ox transport. */
 type GhostcallProvider = {
 	request(args: { method: string; params?: unknown }): Promise<unknown>;
 };
 
-/**
- * The error identifies a call with a failure status, its index, and its revert data.
- * The index starts at zero.
- */
+/** A disallowed failure, with its zero-based index, executed call, and revert data. */
 class GhostcallSubcallError extends Error {
 	readonly index: number;
 	readonly call: GhostcallCall;
@@ -101,33 +98,24 @@ class GhostcallSubcallError extends Error {
 	}
 }
 
-// Request entry:
-//   [length: 2 bytes][target: 20 bytes][calldata: N bytes]
-//   |<--------- 22-byte header ----->|
-// The uint16 length uses big-endian byte order.
+// Request entries: [uint16 calldata length][20-byte target][calldata].
 const callHeaderSize = 22;
 const calldataLengthHexChars = 4;
 const maxCalldataSize = 0xffff;
-// Result entry:
-//   [header: 2 bytes][return data: N bytes]
-// Header bits:
-//   [length: bits 15..1][success: bit 0]
-// The header value is length * 2 + success.
+// Result entries: [uint15 returndata length | success bit][returndata].
 const resultHeaderHexChars = 4;
 const successFlag = 1;
-// EIP-3860 gives the default limit for initcode size.
+const returnDataLengthShift = 1;
+// EIP-3860 initcode limit.
 const defaultMaxInitcodeBytes = 0xc000;
-// The three-byte initcode PUSH0, DUP1, RETURN returns no data.
+// The bundled program needs at least one entry, so an empty batch is sent as
+// PUSH0 DUP1 RETURN, which returns no entries.
 const emptyBatchInitcode = "0x5f80f3";
 
 /**
- * Build data for a CREATE-style eth_call.
- * For a list with one or more calls, put the initcode before the call entries.
- * Each entry has a 22-byte header and calldata.
- * For an empty list, use the three-byte initcode `0x5f80f3` to return no data.
- * Send the request without a `to` address.
- * Throw TypeError for incorrect input.
- * Throw RangeError if the input is larger than a size limit.
+ * Build CREATE-style eth_call data: initcode followed by [length (2)][target (20)][data].
+ * An empty batch is encoded as separate three-byte initcode that returns no entries.
+ * Send without a `to` address. Invalid inputs throw TypeError; size limits throw RangeError.
  */
 function encodeCalls(
 	calls: readonly GhostcallCall[],
@@ -139,7 +127,7 @@ function encodeCalls(
 	const sizeError = `encoded ghostcall initcode exceeds the ${maxInitcodeBytes}-byte CREATE initcode limit`;
 	if (totalEncodedSize > maxInitcodeBytes) throw new RangeError(sizeError);
 
-	// Use a loop to decrease the cost of string concatenation. Refer to benchmark:sdk.
+	// A plain loop keeps the string concatenation fast; see benchmark:sdk.
 	let index = 0;
 	for (const call of calls) {
 		const to = assertAddress(call.to, `calls[${index}].to`);
@@ -162,9 +150,8 @@ function encodeCalls(
 }
 
 /**
- * Run the raw calls in sequence.
- * aggregateCalls throws GhostcallSubcallError for a failure status unless the entry sets allowFailure to true.
- * The SDK does not change provider errors.
+ * Execute a raw batch in order. Failed calls throw GhostcallSubcallError unless
+ * their entry sets allowFailure. Provider errors pass through unchanged.
  */
 async function aggregateCalls(
 	provider: GhostcallProvider,
@@ -184,12 +171,9 @@ async function aggregateCalls(
 }
 
 /**
- * Run ABI calls or raw calls with custom decoders.
- * Each result keeps the type of its tuple position.
- * aggregateDecodedCalls throws an error if a call returns a failure status.
- * The SDK does not change encoding or decoding errors.
- * The ABI decoder returns each address with its checksum.
- * This rule also includes addresses in tuples and arrays.
+ * Execute ABI-described calls or raw calls with custom decoders. Each tuple position
+ * retains its result type. Any failed call throws; encoding/decoding errors pass through.
+ * ABI-decoded addresses are checksummed, including addresses nested in tuples or arrays.
  */
 async function aggregateDecodedCalls<
 	const TCalls extends readonly GhostcallDecodedInput[],
@@ -207,16 +191,12 @@ async function aggregateDecodedCalls<
 	}) as GhostcallDecodedResults<TCalls>;
 }
 
-/**
- * Decode the result entries in sequence.
- * Each two-byte header stores the value `length * 2 + success`.
- * Reject incorrect hex and truncated data.
- */
+/** Decode ordered [uint15 length | success bit][returndata] entries. Reject malformed data. */
 function decodeResults(data: Hex): GhostcallResult[] {
 	return decodeValidatedResults(assertHex(data, "data"));
 }
 
-// Apply failure policies in the aggregate APIs.
+/** Send one eth_call and return one result per call, without applying a failure policy. */
 async function executeCalls(
 	provider: GhostcallProvider,
 	calls: readonly GhostcallCall[],
@@ -248,16 +228,15 @@ async function executeCalls(
 	return results;
 }
 
-/** Parse the hex string only after the public API or the RPC boundary does a check of all its bytes. */
+/** Parse only after the public API or RPC boundary has validated the entire hex string. */
 function decodeValidatedResults(data: Hex): GhostcallResult[] {
 	const results: GhostcallResult[] = [];
 	let cursor = 2;
 	while (cursor < data.length) {
 		const start = cursor + resultHeaderHexChars;
 		const header = Number.parseInt(data.slice(cursor, start), 16);
-		cursor = start + (header >> 1) * 2;
-		// If the header is too short, the cursor is after the data.
-		// The same check finds a header or a body that is too short.
+		cursor = start + (header >> returnDataLengthShift) * 2;
+		// A partial header also ends past the data, so one check covers both cases.
 		if (cursor > data.length) {
 			throw new TypeError("Truncated ghostcall response");
 		}
@@ -267,6 +246,7 @@ function decodeValidatedResults(data: Hex): GhostcallResult[] {
 	return results;
 }
 
+// Types cannot express a 20-byte length; call targets reach the Yul program unchecked.
 function assertAddress(value: string, label: string): Hex {
 	if (!isAddress(value, { strict: false })) {
 		throw new TypeError(`${label} must be a 20-byte hex string`);
@@ -275,7 +255,7 @@ function assertAddress(value: string, label: string): Hex {
 }
 
 function assertHex(value: unknown, label: string): Hex {
-	// The wire format uses only whole bytes.
+	// ox checks prefix/digits; the wire format additionally requires whole bytes.
 	if (!isHex(value, { strict: true }) || value.length % 2 !== 0) {
 		throw new TypeError(
 			`${label} must be an even-length 0x-prefixed hex string`,

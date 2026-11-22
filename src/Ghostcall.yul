@@ -1,80 +1,55 @@
 object "Ghostcall" {
     code {
-        // The EVM runs this initcode for an eth_call without a target address.
-        // RETURN gives the results to eth_call. No contract stays on the chain.
-        // The SDK does a check of each request before it sends the request.
-        // This program does not do a check of the request entries.
+        // CREATE-style eth_call initcode: RETURN becomes the simulated runtime bytes.
+        // Input: appended [uint16 calldata length][20-byte target][calldata] entries.
+        // Output: [uint15 returndata length | success bit][returndata] entries.
+        // The SDK validates inputs; malformed hand-built payloads are unsupported.
 
-        // Memory at the start of each loop:
-        //
-        // 0         datasize("Ghostcall")   entry       codesize()     writePtr
-        // |         |                      |           |              |
-        // +---------+----------------------+-----------+--------------+-------->
-        // | program | calls that have run  | next calls| results      | unused |
-        // +---------+----------------------+-----------+--------------+-------->
-        // |<-------------- input copy ---------------->|<-- RETURN -->|
-        //
-        // Copy the request into memory one time. CALL reads calldata from this copy.
-        // Put results after the input copy. A result cannot change the next call's input.
-        codecopy(0, 0, codesize())
+        // Copy the request once so every CALL reads its calldata in place.
+        codecopy(0x00, 0x00, codesize())
 
-        // This object has no data section. Solc does not add an INVALID byte.
-        // Thus the first entry starts at datasize("Ghostcall").
-        let entry := datasize("Ghostcall")
+        // Without a data section solc appends no trailing INVALID byte, so this
+        // object's size is the offset of the first caller-appended byte.
+        let payloadCursor := datasize("Ghostcall")
+
+        // [codesize(), writePtr) is finalized output, kept after the request so it
+        // cannot overwrite a pending entry. Everything after it is scratch.
         let writePtr := codesize()
 
-        // The main program must have one or more entries.
-        // For an empty batch, the SDK uses a different program that returns no data.
+        // The end of the payload is checked after each call, so the payload needs
+        // at least one entry. The SDK sends empty batches as separate initcode.
         for {} 1 {} {
-            // mload(entry) reads this word. Offsets are in bytes.
-            //
-            // entry         entry + 2               entry + 22     entry + 32
-            // |             |                       |              |
-            // +-------------+-----------------------+--------------+
-            // | length (2)  | target address (20)   | next bytes   |
-            // +-------------+-----------------------+--------------+
-            // |<--- 16 --->|<--------- 160 -------->|<---- 80 ---->|
-            //                       Widths are in bits.
-            //
-            // The program does not use the last 80 bits.
-            let headerWord := mload(entry)
+            // One word holds [length(2)][target(20)][unused(10)].
+            let headerWord := mload(payloadCursor)
             let calldataSize := shr(240, headerWord)
-            let oldEntry := entry
-            let calldataStart := add(entry, 22)
-            entry := add(calldataStart, calldataSize)
+            let calldataStart := add(payloadCursor, 0x16)
+            let nextCursor := add(calldataStart, calldataSize)
 
-            // The shift puts the target in the low 160 bits. CALL uses these bits only.
-            // CALL lets a later call read state changes from an earlier call.
-            // CALL ignores the output offset because its output size is zero.
-            // Use the old cursor for this offset to save one byte.
-            let success := call(gas(), shr(80, headerWord), 0, calldataStart, calldataSize, oldEntry, 0)
+            // CALL truncates the shifted word to the low 160 address bits.
+            // Zero-value CALL (not STATICCALL) exposes state changes to later calls.
+            // The output size is zero, so the output offset is ignored; passing the
+            // cursor there is one byte smaller than pushing another zero.
+            let success := call(gas(), shr(80, headerWord), 0, calldataStart, calldataSize, payloadCursor, 0)
+            payloadCursor := nextCursor
 
-            // Result memory after each write:
-            //
-            // writePtr    writePtr + 2                            writePtr + 32
-            // |           |                                       |
-            // +-----------+---------------------------------------+
-            // | header(2) | temporary bytes                       |  MSTORE
-            // +-----------+---------------------------------------+
-            // +-----------+-----------------------------+
-            // | header(2) | returndata                  |            RETURNDATACOPY
-            // +-----------+-----------------------------+
-            //                                           ^ next writePtr
-            //
-            // The header stores length in bits 1-15 and success in bit 0.
-            // Later writes replace the temporary bytes. RETURN does not include unused bytes.
-            mstore(writePtr, shl(240, add(success, add(returndatasize(), returndatasize()))))
-            writePtr := add(2, writePtr)
+            // Put the header in the high two bytes; the rest of the word is scratch
+            // that later writes overwrite or leave unreturned. The constant comes
+            // first in the add because solc emits eight more bytes the other way.
+            mstore(writePtr, shl(240, add(add(returndatasize(), returndatasize()), success)))
+            writePtr := add(0x02, writePtr)
 
-            // A length of 32,767 bytes or less gives source offset zero.
-            // A larger length gives a nonzero offset. The copy reads past the data buffer.
-            // The EVM stops with an error and no data. It cannot return the incorrect header.
+            // A length past uint15 overflows the header. It also makes the source
+            // offset nonzero, so the copy reads out of bounds and the EVM halts
+            // before the bad header is returned.
             returndatacopy(writePtr, shr(15, returndatasize()), returndatasize())
             writePtr := add(writePtr, returndatasize())
 
-            // The last entry ends at codesize(). Thus entry is the start of the results.
-            // Reuse entry to calculate the result length. This decreases the program size.
-            if iszero(lt(entry, codesize())) { return(codesize(), sub(writePtr, entry)) }
+            // Aggregate size is governed by the active chain/client's CREATE policy.
+            // The last entry ends at codesize(), where the output starts, so the cursor
+            // measures the output two bytes cheaper than codesize() would.
+            if iszero(lt(payloadCursor, codesize())) {
+                return(codesize(), sub(writePtr, payloadCursor))
+            }
         }
     }
 }

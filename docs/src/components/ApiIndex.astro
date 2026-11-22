@@ -1,26 +1,25 @@
 ---
-// biome-ignore lint/correctness/noUnusedVariables: The Astro template uses this variable.
+// biome-ignore lint/correctness/noUnusedVariables: Referenced by the Astro template.
 const entries = [
 	{
 		name: "aggregateDecodedCalls()",
 		href: "/api/aggregate-decoded-calls/",
-		description: "Decoded values in the same order as the calls.",
+		description: "Decoded values in call order.",
 	},
 	{
 		name: "aggregateCalls()",
 		href: "/api/aggregate-calls/",
-		description:
-			"Success flags and return data in the same order as the calls.",
+		description: "Success flags and return data in call order.",
 	},
 	{
 		name: "encodeCalls()",
 		href: "/api/encode-calls/",
-		description: "Request data for an eth_call from the application.",
+		description: "Request data for a manual eth_call.",
 	},
 	{
 		name: "decodeResults()",
 		href: "/api/decode-results/",
-		description: "Results from a raw response.",
+		description: "Entries parsed from a raw response.",
 	},
 ];
 ---
