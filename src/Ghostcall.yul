@@ -17,7 +17,7 @@ object "Ghostcall" {
         let writePtr := codesize()
 
         // The end of the payload is checked after each call, so the payload needs
-        // at least one entry. The SDK sends empty batches as separate initcode.
+        // at least one entry. The SDK never sends an empty batch.
         for {} 1 {} {
             // One word holds [length(2)][target(20)][unused(10)].
             let headerWord := mload(payloadCursor)

@@ -42,10 +42,6 @@ test("ghostcall integration", async (t) => {
 		},
 	);
 
-	await t.test("executes empty batches", async () => {
-		assert.deepEqual(await aggregateCalls(transport, []), []);
-	});
-
 	await t.test("packs unaligned results", async () => {
 		const cases = [
 			[`0x${"aa".repeat(40)}`, "0xaa"],

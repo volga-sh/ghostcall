@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { size as hexSize } from "ox/Hex";
-import { ghostcallInitcode } from "../src/sdk/generated/initcode.ts";
 import {
 	aggregateCalls,
 	aggregateDecodedCalls,
@@ -12,6 +11,7 @@ import {
 	type GhostcallProvider,
 	type GhostcallResult,
 	GhostcallSubcallError,
+	ghostcallInitcode,
 	type Hex,
 } from "../src/sdk/index.ts";
 
@@ -63,9 +63,12 @@ test("enforces calldata and full CREATE request ceilings at their boundaries", (
 	);
 });
 
-test("encodes an empty batch as three-byte initcode that returns no entries", () => {
-	assert.equal(encodeCalls([], { maxInitcodeBytes: 3 }), "0x5f80f3");
-	assert.throws(() => encodeCalls([], { maxInitcodeBytes: 2 }), RangeError);
+test("an empty batch returns no results without an RPC request and cannot be encoded", async (t) => {
+	const request = t.mock.fn<GhostcallProvider["request"]>();
+	assert.deepEqual(await aggregateCalls({ request }, []), []);
+	assert.deepEqual(await aggregateDecodedCalls({ request }, []), []);
+	assert.equal(request.mock.callCount(), 0);
+	assert.throws(() => encodeCalls([]), RangeError);
 });
 
 test("rejects addresses and calldata that the Hex type admits but the wire format does not", async () => {
@@ -79,7 +82,7 @@ test("rejects addresses and calldata that the Hex type admits but the wire forma
 	for (const input of invalid)
 		assert.throws(() => encodeCalls([input]), TypeError);
 	await assert.rejects(
-		aggregateCalls(providerReturning("0x"), [], {
+		aggregateCalls(providerReturning("0x"), [call], {
 			ethCall: { from: "0x1234" },
 		}),
 		/options\.ethCall\.from must be a 20-byte hex string/,

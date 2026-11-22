@@ -108,22 +108,22 @@ const successFlag = 1;
 const returnDataLengthShift = 1;
 // EIP-3860 initcode limit.
 const defaultMaxInitcodeBytes = 0xc000;
-// The bundled program needs at least one entry, so an empty batch is sent as
-// PUSH0 DUP1 RETURN, which returns no entries.
-const emptyBatchInitcode = "0x5f80f3";
+const bundledInitcodeSize = hexSize(ghostcallInitcode);
 
 /**
  * Build CREATE-style eth_call data: initcode followed by [length (2)][target (20)][data].
- * An empty batch is encoded as separate three-byte initcode that returns no entries.
  * Send without a `to` address. Invalid inputs throw TypeError; size limits throw RangeError.
+ * The program needs at least one call, so an empty list also throws RangeError.
  */
 function encodeCalls(
 	calls: readonly GhostcallCall[],
 	{ maxInitcodeBytes = defaultMaxInitcodeBytes }: GhostcallEncodeOptions = {},
 ): Hex {
-	let encodedData: Hex =
-		calls.length === 0 ? emptyBatchInitcode : ghostcallInitcode;
-	let totalEncodedSize = hexSize(encodedData);
+	if (calls.length === 0) {
+		throw new RangeError("calls must contain at least one call");
+	}
+	let encodedData: Hex = ghostcallInitcode;
+	let totalEncodedSize = bundledInitcodeSize;
 	const sizeError = `encoded ghostcall initcode exceeds the ${maxInitcodeBytes}-byte CREATE initcode limit`;
 	if (totalEncodedSize > maxInitcodeBytes) throw new RangeError(sizeError);
 
@@ -202,6 +202,8 @@ async function executeCalls(
 	calls: readonly GhostcallCall[],
 	options: GhostcallAggregateOptions = {},
 ): Promise<GhostcallResult[]> {
+	// The program needs at least one entry, so an empty batch skips the RPC.
+	if (calls.length === 0) return [];
 	const { from, gas, blockTag = "latest" } = options.ethCall ?? {};
 	const ethCall = {
 		data: encodeCalls(calls, options),
@@ -284,4 +286,5 @@ export {
 	decodeResults,
 	encodeCalls,
 	GhostcallSubcallError,
+	ghostcallInitcode,
 };

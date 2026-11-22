@@ -4,13 +4,13 @@ import { parseArgs } from "node:util";
 import { RpcTransport } from "ox";
 import { validate as isAddress } from "ox/Address";
 import { size as hexSize } from "ox/Hex";
-import { ghostcallInitcode } from "../src/sdk/generated/initcode.ts";
 
 import {
 	decodeResults,
 	encodeCalls,
 	type GhostcallCall,
 	type GhostcallProvider,
+	ghostcallInitcode,
 	type Hex,
 } from "../src/sdk/index.ts";
 

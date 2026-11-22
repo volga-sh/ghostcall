@@ -37,7 +37,8 @@ See [Types](/api/types/) for each type.
   transport.
 - `calls` run in order. Set `allowFailure: true` to return that entry with
   `success: false` instead of throwing. The SDK applies it after the response
-  arrives; it is not sent to the EVM.
+  arrives; it is not sent to the EVM. An empty list returns `[]` without sending
+  a request.
 - `options` apply to the whole batch. `maxInitcodeBytes` defaults to `49,152`.
 
 ## Block, sender, and gas

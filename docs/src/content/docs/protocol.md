@@ -54,9 +54,7 @@ N bytes calldata
 ```
 
 There is no call count. The program reads entries until it reaches the end of
-the request data, and it needs at least one entry. For an empty batch,
-`encodeCalls()` returns a separate three-byte program that returns an empty
-response.
+the request data, and it needs at least one entry.
 
 `encodeCalls()` checks addresses, hex strings, calldata lengths, and the full
 request size. The program itself does not validate the request bytes, which

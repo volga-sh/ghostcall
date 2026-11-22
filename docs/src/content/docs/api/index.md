@@ -3,8 +3,8 @@ title: API Reference
 description: Choose a ghostcall function based on the required result.
 ---
 
-ghostcall exports four functions, one error class, and their
-[types](/api/types/).
+ghostcall exports four functions, one error class, their
+[types](/api/types/), and the compiled program as `ghostcallInitcode`.
 
 | Goal | Function |
 | --- | --- |
@@ -24,6 +24,7 @@ import {
 	decodeResults,
 	encodeCalls,
 	GhostcallSubcallError,
+	ghostcallInitcode,
 } from "@volga-sh/evm-ghostcall";
 ```
 

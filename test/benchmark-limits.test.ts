@@ -11,8 +11,7 @@ import {
 	parseBenchmarkArgs,
 	runBenchmark,
 } from "../scripts/benchmark-limits.ts";
-import { ghostcallInitcode } from "../src/sdk/generated/initcode.ts";
-import type { Hex } from "../src/sdk/index.ts";
+import { ghostcallInitcode, type Hex } from "../src/sdk/index.ts";
 
 const tokenA = "0x1111111111111111111111111111111111111111";
 const tokenB = "0x2222222222222222222222222222222222222222";
