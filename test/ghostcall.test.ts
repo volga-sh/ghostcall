@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AbiError, AbiFunction, AbiParameters } from "ox";
+import { Abi, AbiError, AbiFunction, AbiParameters } from "ox";
 import {
 	aggregateCalls,
 	aggregateDecodedCalls,
@@ -103,6 +103,54 @@ test("ghostcall integration", async (t) => {
 					assert.ok(error.cause instanceof AbiParameters.ZeroDataError);
 					return true;
 				},
+			);
+		},
+	);
+
+	await t.test(
+		"decoded calls that allow failure return a revert and a code-less target as errors",
+		async () => {
+			const tokenAbi = Abi.from([
+				"function symbol() view returns (string)",
+				"function decimals() view returns (uint8)",
+			]);
+			const symbol = AbiFunction.fromAbi(tokenAbi, "symbol");
+			const decimals = AbiFunction.fromAbi(tokenAbi, "decimals");
+			await write("givenMethodReturn", [
+				AbiFunction.encodeData(symbol),
+				AbiFunction.encodeResult(symbol, "GHOST"),
+			]);
+			await write("givenMethodRevertWithMessage", [
+				AbiFunction.encodeData(decimals),
+				"no decimals",
+			]);
+			// No code is deployed here, so the call succeeds with empty return data.
+			const codeless = "0x000000000000000000000000000000000000dEaD";
+			const [name, reverted, empty] = await aggregateDecodedCalls(transport, [
+				{ to, abi: tokenAbi, functionName: "symbol" },
+				{ to, abi: tokenAbi, functionName: "decimals", allowFailure: true },
+				{
+					to: codeless,
+					abi: tokenAbi,
+					functionName: "symbol",
+					allowFailure: true,
+				},
+			]);
+			assert.equal(name, "GHOST");
+			assert.ok(!reverted.success && !empty.success);
+			assert.equal(reverted.error.kind, "call");
+			const { returnData } = reverted.error;
+			const revert = AbiError.fromAbi([], returnData);
+			assert.equal(AbiError.decode(revert, returnData), "no decimals");
+			assert.equal(empty.error.kind, "decode");
+			assert.equal(empty.error.returnData, "0x");
+			assert.ok(empty.error.cause instanceof AbiParameters.ZeroDataError);
+			// Without the flag, the same revert throws instead.
+			await assert.rejects(
+				aggregateDecodedCalls(transport, [
+					{ to, abi: tokenAbi, functionName: "decimals" },
+				]),
+				{ kind: "call", index: 0, returnData },
 			);
 		},
 	);

@@ -57,9 +57,9 @@ throws a [`GhostcallSubcallError`](/api/subcall-error/) that identifies the call
 
 ## Next
 
-- [`aggregateCalls()`](/api/aggregate-calls/) lets selected calls fail and sets
-  the block, sender, or gas.
-- [`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/) covers overloads and
-  custom decoders for raw calldata.
+- [`aggregateCalls()`](/api/aggregate-calls/) returns raw success flags and
+  return data, and sets the block, sender, or gas.
+- [`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/) covers overloads,
+  calls allowed to fail, and custom decoders for raw calldata.
 - [`encodeCalls()`](/api/encode-calls/) builds the request when the application
   sends the RPC call itself.

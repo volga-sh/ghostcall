@@ -151,27 +151,79 @@ test("decodes custom results with their batch index", async (t) => {
 	assert.deepEqual(decode.mock.calls[0]?.arguments, ["0x2a", 0]);
 });
 
-test("failed calls throw before reaching decoders, even with a hidden allowFailure", async (t) => {
+test("failed calls throw before reaching decoders unless they allow failure", async (t) => {
 	const provider = providerReturning("0x00022a");
 	const decodeResult = t.mock.fn(() => 42);
 	await assert.rejects(aggregateCalls(provider, [call]), GhostcallSubcallError);
-	const original = { ...call, decodeResult, allowFailure: true };
-	// Structural typing can hide an extra field without removing it at runtime.
-	const erased: Omit<GhostcallDecodedCall<number>, "allowFailure"> = original;
-	await assert.rejects(
-		aggregateDecodedCalls(provider, [erased]),
-		(error: unknown) => {
-			assert.ok(error instanceof GhostcallSubcallError);
-			assert.equal(error.message, `ghostcall subcall 0 to ${call.to} failed`);
-			assert.equal(error.kind, "call");
-			assert.equal(error.index, 0);
-			assert.equal(error.call, original);
-			assert.equal(error.returnData, "0x2a");
-			assert.ok(!("cause" in error));
-			return true;
-		},
-	);
+	for (const decodedCall of [
+		{ ...call, decodeResult },
+		{ ...call, decodeResult, allowFailure: false },
+	] as const) {
+		await assert.rejects(
+			aggregateDecodedCalls(provider, [decodedCall]),
+			(error: unknown) => {
+				assert.ok(error instanceof GhostcallSubcallError);
+				assert.equal(error.message, `ghostcall subcall 0 to ${call.to} failed`);
+				assert.equal(error.kind, "call");
+				assert.equal(error.index, 0);
+				assert.equal(error.call, decodedCall);
+				assert.equal(error.returnData, "0x2a");
+				assert.ok(!("cause" in error));
+				return true;
+			},
+		);
+	}
 	assert.equal(decodeResult.mock.callCount(), 0);
+});
+
+test("entries that allow failure return the error they would otherwise throw", async (t) => {
+	const decode = t.mock.fn((data: Hex) => Number.parseInt(data.slice(2), 16));
+	const thrown = new Error("unexpected return data");
+	const rejectData = t.mock.fn((): number => {
+		throw thrown;
+	});
+	const calls = [
+		{ ...call, decodeResult: decode, allowFailure: true },
+		{ ...call, decodeResult: decode, allowFailure: true },
+		{ ...call, decodeResult: rejectData, allowFailure: true },
+		{ ...call, decodeResult: decode },
+	] as const;
+	const response = "0x00032a0002bb0003cc0003dd";
+	assert.deepEqual(
+		await aggregateDecodedCalls(providerReturning(response), calls),
+		[
+			{ success: true, result: 42 },
+			{
+				success: false,
+				error: new GhostcallSubcallError({
+					kind: "call",
+					index: 1,
+					call: calls[1],
+					returnData: "0xbb",
+				}),
+			},
+			{
+				success: false,
+				error: new GhostcallSubcallError({
+					kind: "decode",
+					index: 2,
+					call: calls[2],
+					returnData: "0xcc",
+					cause: thrown,
+				}),
+			},
+			221,
+		],
+	);
+	// Revert data never reaches a decoder; rejected return data does, once.
+	assert.deepEqual(
+		decode.mock.calls.map(({ arguments: args }) => args),
+		[
+			["0x2a", 0],
+			["0xdd", 3],
+		],
+	);
+	assert.deepEqual(rejectData.mock.calls[0]?.arguments, ["0xcc", 2]);
 });
 
 test("decoder throws become decode-kind GhostcallSubcallErrors with the thrown value as cause", async () => {

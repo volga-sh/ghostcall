@@ -91,8 +91,9 @@ known before execution.
 Rules about whether an ordinary failed call should throw are applied later by
 the SDK:
 
-- `aggregateDecodedCalls()` throws for every failed call.
 - `aggregateCalls()` throws unless the entry sets `allowFailure: true`.
+- `aggregateDecodedCalls()` throws unless the entry sets `allowFailure: true`,
+  which returns a failure result at that position instead.
 - `decodeResults()` returns the success bit without applying a failure rule.
 
 ## Next

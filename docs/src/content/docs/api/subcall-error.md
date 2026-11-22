@@ -3,13 +3,17 @@ title: GhostcallSubcallError
 description: Identify the contract call that caused a batch to throw, and why.
 ---
 
-`GhostcallSubcallError` identifies the call that made a batch throw, and its
-`kind` says why:
+`GhostcallSubcallError` identifies a call that failed or whose result could
+not be decoded, and its `kind` says which:
 
-- `"call"`: the call failed. `aggregateCalls()` throws this unless the call
-  sets `allowFailure: true`; `aggregateDecodedCalls()` always throws it.
+- `"call"`: the call failed. `aggregateCalls()` and `aggregateDecodedCalls()`
+  throw this unless the entry sets `allowFailure: true`.
 - `"decode"`: the call succeeded, but its result could not be decoded. Only
-  `aggregateDecodedCalls()` throws this.
+  `aggregateDecodedCalls()` reports this.
+
+An `aggregateDecodedCalls()` entry with `allowFailure: true` returns either kind
+as its result's `error` instead of throwing it; see
+[Allowing failures](/api/aggregate-decoded-calls/#allowing-failures).
 
 ```ts twoslash
 import { aggregateCalls, GhostcallSubcallError } from "@volga-sh/evm-ghostcall";

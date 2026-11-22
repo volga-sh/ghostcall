@@ -4,6 +4,7 @@ import {
 	type GhostcallAbiCall,
 	type GhostcallCall,
 	type GhostcallDecodedCall,
+	type GhostcallDecodedResult,
 	type GhostcallProvider,
 	GhostcallSubcallError,
 	type Hex,
@@ -161,14 +162,119 @@ async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 	const missingDecoder = { to, data: "0x" } as const;
 	// @ts-expect-error Decoded raw calls require a decoder.
 	aggregateDecodedCalls(provider, [missingDecoder]);
-	const failureAllowed = {
+}
+
+async function checkAllowFailureTypes(
+	provider: GhostcallProvider,
+): Promise<void> {
+	// Only entries that set allowFailure: true wrap their result.
+	const results = await aggregateDecodedCalls(provider, [
+		{ to, abi, functionName: "balanceOf", args: [to] },
+		{ to, abi, functionName: "symbol", allowFailure: true },
+		{ to, abi, functionName: "lookup", args: [to], allowFailure: true },
+		{ to, abi, functionName: "decimals", allowFailure: false },
+		{ to, data: "0x", decodeResult: (data) => data.length, allowFailure: true },
+	]);
+	assertType<
+		Equal<
+			typeof results,
+			[
+				bigint,
+				GhostcallDecodedResult<string>,
+				GhostcallDecodedResult<string>,
+				number,
+				GhostcallDecodedResult<number>,
+			]
+		>
+	>();
+	const [, symbol] = results;
+	if (symbol.success) {
+		assertType<Equal<typeof symbol.result, string>>();
+	} else {
+		assertType<Equal<typeof symbol.error, GhostcallSubcallError>>();
+		// @ts-expect-error A failed entry has no decoded result.
+		symbol.result;
+	}
+
+	const reused = [
+		{ to, abi, functionName: "balanceOf", args: [to], allowFailure: true },
+		{ to, abi, functionName: "totalSupply" },
+	] as const satisfies readonly GhostcallAbiCall<typeof abi, boolean>[];
+	const reusedResults = await aggregateDecodedCalls(provider, reused);
+	assertType<
+		Equal<typeof reusedResults, [GhostcallDecodedResult<bigint>, bigint]>
+	>();
+	const tokens: Hex[] = [to];
+	const symbolCalls = tokens.map(
+		(token) =>
+			({ to: token, abi, functionName: "symbol", allowFailure: true }) as const,
+	);
+	const symbols = await aggregateDecodedCalls(provider, symbolCalls);
+	assertType<Equal<typeof symbols, GhostcallDecodedResult<string>[]>>();
+	const allowedArray: GhostcallDecodedCall<number, true>[] = [
+		{ to, data: "0x", decodeResult: (data) => data.length, allowFailure: true },
+	];
+	const allowedResults = await aggregateDecodedCalls(provider, allowedArray);
+	assertType<Equal<typeof allowedResults, GhostcallDecodedResult<number>[]>>();
+
+	// A policy chosen at runtime types its result as either shape.
+	const allowFailure = tokens.length > 1;
+	const runtimePolicy = await aggregateDecodedCalls(provider, [
+		{ to, abi, functionName: "totalSupply", allowFailure },
+	]);
+	assertType<
+		Equal<typeof runtimePolicy, [bigint | GhostcallDecodedResult<bigint>]>
+	>();
+	const runtimeArray: GhostcallDecodedCall<number, boolean>[] = [];
+	const runtimeArrayResults = await aggregateDecodedCalls(
+		provider,
+		runtimeArray,
+	);
+	assertType<
+		Equal<
+			typeof runtimeArrayResults,
+			(number | GhostcallDecodedResult<number>)[]
+		>
+	>();
+
+	// Each call in a union keeps its own policy.
+	const mixedPolicies: (
+		| GhostcallDecodedCall<number, true>
+		| GhostcallDecodedCall<string>
+	)[] = [];
+	const mixedPolicyResults = await aggregateDecodedCalls(
+		provider,
+		mixedPolicies,
+	);
+	assertType<
+		Equal<
+			typeof mixedPolicyResults,
+			(GhostcallDecodedResult<number> | string)[]
+		>
+	>();
+
+	const flagged = {
 		to,
 		data: "0x",
-		decodeResult: () => 1,
+		decodeResult: (data: Hex) => data.length,
 		allowFailure: true,
 	} as const;
-	// @ts-expect-error Reused objects cannot permit failure in the decoded API.
-	aggregateDecodedCalls(provider, [failureAllowed]);
+	const flaggedResults = await aggregateDecodedCalls(provider, [flagged]);
+	assertType<Equal<typeof flaggedResults, [GhostcallDecodedResult<number>]>>();
+	// @ts-expect-error A call type that forbids failure cannot allow it.
+	const strict: GhostcallDecodedCall<number>[] = [flagged];
+	const flaggedAbi = {
+		to,
+		abi,
+		functionName: "symbol",
+		allowFailure: true,
+	} as const;
+	// @ts-expect-error The same holds for ABI calls.
+	const strictAbi: GhostcallAbiCall<typeof abi> = flaggedAbi;
+	const unflagged = { to, data: "0x", decodeResult: () => 1 } as const;
+	// @ts-expect-error A call type that permits failure must set the flag.
+	const permitted: GhostcallDecodedCall<number, true> = unflagged;
+	void [strict, strictAbi, permitted];
 }
 
 async function checkSharedNames(provider: GhostcallProvider): Promise<void> {
@@ -210,4 +316,10 @@ function checkSubcallError(error: unknown, call: GhostcallCall): void {
 	new GhostcallSubcallError({ kind: "call", ...fields, cause: 1 });
 }
 
-void [checkDecodedTypes, checkSharedNames, checkDynamicAbi, checkSubcallError];
+void [
+	checkDecodedTypes,
+	checkAllowFailureTypes,
+	checkSharedNames,
+	checkDynamicAbi,
+	checkSubcallError,
+];

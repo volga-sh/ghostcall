@@ -6,7 +6,8 @@ description: Describe ABI calls once and receive typed decoded results.
 `aggregateDecodedCalls()` sends one `eth_call` and returns one decoded value for
 each input call. Results keep the same order as the calls. If a call fails or
 its result cannot be decoded, `aggregateDecodedCalls()` throws
-`GhostcallSubcallError` for the first such call.
+`GhostcallSubcallError` for the first such call, unless its entry
+[allows failure](#allowing-failures).
 
 ## ABI calls
 
@@ -84,12 +85,59 @@ A custom decoder receives `(returnData, index)`: the successful call's return
 data and its zero-based position. Its return type determines that
 position's result type. If the decoder throws, `aggregateDecodedCalls()` throws
 a `GhostcallSubcallError` with `kind: "decode"` and the decoder's error as
-`cause`.
+`cause`, unless the entry [allows failure](#allowing-failures).
 
 Each entry uses either ABI fields or raw calldata with a decoder. TypeScript
-rejects entries mixing these fields, and neither form accepts `allowFailure`.
-Use [`aggregateCalls()`](/api/aggregate-calls/) for raw `{ to, data }` calls and
-optional failures.
+rejects entries mixing these fields. Use
+[`aggregateCalls()`](/api/aggregate-calls/) for raw `{ to, data }` calls without
+decoding.
+
+## Allowing failures
+
+Set `allowFailure: true` on an entry whose call may fail, such as a read across
+tokens that may not implement the standard interface. That position then holds
+a [`GhostcallDecodedResult`](/api/types/) instead of the bare value. A failure
+carries the [`GhostcallSubcallError`](/api/subcall-error/) that the entry would
+otherwise throw:
+
+```ts twoslash
+import { aggregateDecodedCalls } from "@volga-sh/evm-ghostcall";
+import { erc20Abi } from "viem";
+
+const usdc = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+const mkr = "0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2";
+
+const [usdcSymbol, mkrSymbol] = await aggregateDecodedCalls(client, [
+	{ to: usdc, abi: erc20Abi, functionName: "symbol" },
+	// MKR returns its symbol as bytes32, which does not decode as a string.
+	{ to: mkr, abi: erc20Abi, functionName: "symbol", allowFailure: true },
+]);
+
+if (mkrSymbol.success) {
+	console.log(mkrSymbol.result);
+} else if (mkrSymbol.error.kind === "decode") {
+	// The raw bytes32 the string decoder rejected.
+	console.log(mkrSymbol.error.returnData);
+} else {
+	throw mkrSymbol.error;
+}
+```
+
+A result with `success: true` carries the decoded `result`. One with
+`success: false` carries `error`, whose `kind` says why:
+
+- `"call"`: the call failed. `error.returnData` is its revert data, and the
+  decoder never ran.
+- `"decode"`: the call succeeded, but its decoder threw on `error.returnData`.
+  `error.cause` is the decoder's error. A call to an address without code
+  succeeds with `0x`, which an ABI decoder rejects for any function with
+  outputs.
+
+The flag changes only its own position. Entries without it still return the
+bare value, and the first of their errors throws. A flag typed as `boolean`
+rather than `true` leaves the choice to runtime, so its position has type
+`T | GhostcallDecodedResult<T>`. To declare failure-tolerant entries ahead of
+the batch, see [Types](/api/types/#declaring-reusable-calls).
 
 ## Provider and options
 
@@ -109,6 +157,8 @@ calls in the batch.
 - A result that cannot be decoded throws `GhostcallSubcallError` with
   `kind: "decode"` and the decoder's error as `cause`. For example, a call to
   an address without code returns `0x`, which is not a valid `uint256`.
+- An entry that sets `allowFailure: true` returns either error in its result
+  instead of throwing it.
 - A response with a different entry count throws `Error`.
 
 Provider and transport errors pass through unchanged.

@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Abi, AbiFunction } from "ox";
+import { Abi, AbiFunction, AbiParameters } from "ox";
 import { size as hexSize } from "ox/Hex";
 import {
 	aggregateDecodedCalls,
 	encodeCalls,
 	type GhostcallAbiCall,
 	type GhostcallProvider,
+	type GhostcallResult,
 	GhostcallSubcallError,
 	type Hex,
 } from "../src/sdk/index.ts";
@@ -20,14 +21,21 @@ const abi = Abi.from([
 	"event Transfer(address indexed from, address indexed to, uint256 amount)",
 ]);
 
-/** Pack successful return data as a ghostcall response. */
-function successResponse(...returnData: Hex[]): Hex {
-	return `0x${returnData
-		.map((data) => {
-			const header = hexSize(data) * 2 + 1;
-			return `${header.toString(16).padStart(4, "0")}${data.slice(2)}`;
+/** Pack results as a ghostcall response of [uint15 length | success bit][returndata]. */
+function packResults(...results: GhostcallResult[]): Hex {
+	return `0x${results
+		.map(({ success, returnData }) => {
+			const header = hexSize(returnData) * 2 + Number(success);
+			return `${header.toString(16).padStart(4, "0")}${returnData.slice(2)}`;
 		})
 		.join("")}`;
+}
+
+/** Pack successful return data as a ghostcall response. */
+function successResponse(...returnData: Hex[]): Hex {
+	return packResults(
+		...returnData.map((data) => ({ success: true, returnData: data })),
+	);
 }
 
 test("resolves overloads per call and mixes ABI results with custom decoders in order", async (t) => {
@@ -207,4 +215,54 @@ test("ABI subcall failures expose the executed calldata and raw revert data", as
 			return true;
 		},
 	);
+});
+
+test("ABI calls that allow failure return failed and undecodable calls as errors", async () => {
+	const tokenAbi = Abi.from([
+		"function symbol() view returns (string)",
+		"function decimals() view returns (uint8)",
+	]);
+	const symbol = AbiFunction.fromAbi(tokenAbi, "symbol");
+	const decimals = AbiFunction.fromAbi(tokenAbi, "decimals");
+	// Some early tokens return symbol() as bytes32, which is not an ABI string.
+	const bytes32Symbol: Hex = `0x${"4d4b52".padEnd(64, "0")}`;
+	const response = packResults(
+		{ success: true, returnData: AbiFunction.encodeResult(symbol, "GHOST") },
+		{ success: false, returnData: "0xdeadbeef" },
+		// A target without code succeeds with empty return data.
+		{ success: true, returnData: "0x" },
+		{ success: true, returnData: bytes32Symbol },
+		{ success: true, returnData: AbiFunction.encodeResult(decimals, 18) },
+	);
+	const symbolCall = {
+		to,
+		abi: tokenAbi,
+		functionName: "symbol",
+		allowFailure: true,
+	} as const;
+	const [ghost, reverted, empty, bytes32, decimalsResult] =
+		await aggregateDecodedCalls({ request: async () => response }, [
+			symbolCall,
+			symbolCall,
+			symbolCall,
+			symbolCall,
+			{ to, abi: tokenAbi, functionName: "decimals" },
+		]);
+	assert.deepEqual(ghost, { success: true, result: "GHOST" });
+	assert.ok(!reverted.success && !empty.success && !bytes32.success);
+	assert.deepEqual(
+		[reverted, empty, bytes32].map(({ error }) => [
+			error.kind,
+			error.index,
+			error.call.data,
+			error.returnData,
+		]),
+		[
+			["call", 1, AbiFunction.encodeData(symbol), "0xdeadbeef"],
+			["decode", 2, AbiFunction.encodeData(symbol), "0x"],
+			["decode", 3, AbiFunction.encodeData(symbol), bytes32Symbol],
+		],
+	);
+	assert.ok(empty.error.cause instanceof AbiParameters.ZeroDataError);
+	assert.equal(decimalsResult, 18);
 });
