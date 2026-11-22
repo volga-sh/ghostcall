@@ -1,14 +1,15 @@
 ---
 title: GhostcallSubcallError
-description: Identify the contract call that caused a batch to throw.
+description: Identify the contract call that caused a batch to throw, and why.
 ---
 
-`GhostcallSubcallError` identifies the call that made a batch throw:
+`GhostcallSubcallError` identifies the call that made a batch throw, and its
+`kind` says why:
 
-- `aggregateCalls()` throws it when a call fails, unless that call sets
-  `allowFailure: true`.
-- `aggregateDecodedCalls()` throws it when a call fails or its result cannot be
-  decoded.
+- `"call"`: the call failed. `aggregateCalls()` throws this unless the call
+  sets `allowFailure: true`; `aggregateDecodedCalls()` always throws it.
+- `"decode"`: the call succeeded, but its result could not be decoded. Only
+  `aggregateDecodedCalls()` throws this.
 
 ```ts twoslash
 import { aggregateCalls, GhostcallSubcallError } from "@volga-sh/evm-ghostcall";
@@ -22,7 +23,7 @@ try {
 	]);
 } catch (error) {
 	if (!(error instanceof GhostcallSubcallError)) throw error;
-	console.log(error.index, error.call, error.returnData);
+	console.log(error.index, error.kind, error.returnData);
 }
 ```
 
@@ -32,8 +33,9 @@ The error extends `Error` with these properties:
 | --- | --- | --- |
 | `index` | `number` | Zero-based position of the call. |
 | `call` | `GhostcallCall` | The raw entry that ran. For ABI calls, this is the target and encoded calldata. |
-| `returnData` | `Hex` | What the call returned: its revert data if it failed, or the result that could not be decoded. |
-| `cause` | `unknown` | The decoder's error. Set only when the result could not be decoded. |
+| `kind` | `"call" \| "decode"` | Whether the call failed or its result could not be decoded. |
+| `returnData` | `Hex` | For `"call"`, the revert data. For `"decode"`, the result that could not be decoded. |
+| `cause` | `unknown` | For `"decode"` only: the error the decoder threw. |
 
 ## Decoding failures
 
@@ -56,8 +58,10 @@ try {
 	]);
 } catch (error) {
 	if (!(error instanceof GhostcallSubcallError)) throw error;
-	// 1, the codeless address, and ox's ZeroDataError
-	console.log(error.index, error.call.to, error.cause);
+	if (error.kind === "decode") {
+		// 1, the codeless address, and ox's ZeroDataError
+		console.log(error.index, error.call.to, error.cause);
+	}
 }
 ```
 

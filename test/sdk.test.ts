@@ -162,21 +162,26 @@ test("failed calls throw before reaching decoders, even with a hidden allowFailu
 		aggregateDecodedCalls(provider, [erased]),
 		(error: unknown) => {
 			assert.ok(error instanceof GhostcallSubcallError);
+			assert.equal(error.message, `ghostcall subcall 0 to ${call.to} failed`);
+			assert.equal(error.kind, "call");
 			assert.equal(error.index, 0);
 			assert.equal(error.call, original);
 			assert.equal(error.returnData, "0x2a");
-			assert.equal(error.message, "ghostcall subcall 0 failed");
-			assert.equal(error.cause, undefined);
+			assert.ok(!("cause" in error));
 			return true;
 		},
 	);
 	assert.equal(decodeResult.mock.callCount(), 0);
 });
 
-test("decoder throws become GhostcallSubcallError with the call index and the thrown value as cause", async () => {
+test("decoder throws become decode-kind GhostcallSubcallErrors with the thrown value as cause", async () => {
 	const provider = providerReturning("0x00032a0005babe");
-	// A decoder may throw any value, not only an Error.
-	for (const thrown of [new RangeError("unexpected length"), "not an Error"]) {
+	// A decoder may throw any value, even undefined; `kind` still says "decode".
+	for (const thrown of [
+		new RangeError("bad length"),
+		"not an Error",
+		undefined,
+	]) {
 		const throwing = {
 			...call,
 			decodeResult: (): never => {
@@ -192,11 +197,13 @@ test("decoder throws become GhostcallSubcallError with the call index and the th
 				assert.ok(error instanceof GhostcallSubcallError);
 				assert.equal(
 					error.message,
-					"ghostcall subcall 1 result could not be decoded",
+					`ghostcall subcall 1 to ${call.to} succeeded, but its result could not be decoded`,
 				);
+				assert.equal(error.kind, "decode");
 				assert.equal(error.index, 1);
 				assert.equal(error.call, throwing);
 				assert.equal(error.returnData, "0xbabe");
+				assert.ok("cause" in error);
 				assert.equal(error.cause, thrown);
 				return true;
 			},
@@ -217,13 +224,13 @@ test("the first failed or undecodable call is reported and later decoders do not
 	// Call 1 cannot be decoded and call 2 reverted: call 1 is reported.
 	await assert.rejects(
 		aggregateDecodedCalls(providerReturning("0x0003aa0003bb0002cc"), calls),
-		/subcall 1 result could not be decoded/,
+		{ kind: "decode", index: 1 },
 	);
 	assert.equal(decode.mock.callCount(), 1);
 	// Call 0 reverted: it is reported before any decoder runs.
 	await assert.rejects(
 		aggregateDecodedCalls(providerReturning("0x0002aa0003bb0003cc"), calls),
-		/subcall 0 failed/,
+		{ kind: "call", index: 0 },
 	);
 	assert.equal(decode.mock.callCount(), 1);
 	assert.equal(reject.mock.callCount(), 1);

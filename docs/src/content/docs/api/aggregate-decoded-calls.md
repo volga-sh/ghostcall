@@ -82,8 +82,9 @@ const results = await aggregateDecodedCalls(client, [
 
 A custom decoder receives `(returnData, index)`: the successful call's return
 data and its zero-based position. Its return type determines that
-position's result type. If the decoder throws, its error becomes the `cause` of
-a `GhostcallSubcallError`.
+position's result type. If the decoder throws, `aggregateDecodedCalls()` throws
+a `GhostcallSubcallError` with `kind: "decode"` and the decoder's error as
+`cause`.
 
 Each entry uses either ABI fields or raw calldata with a decoder. TypeScript
 rejects entries mixing these fields, and neither form accepts `allowFailure`.
@@ -103,11 +104,11 @@ calls in the batch.
   request.
 - Invalid addresses, calldata, or provider responses throw `TypeError`.
 - Requests exceeding a protocol or configured size limit throw `RangeError`.
-- A failed call throws [`GhostcallSubcallError`](/api/subcall-error/) with its
-  revert data.
-- A result that cannot be decoded also throws `GhostcallSubcallError`, with the
-  decoder's error as `cause`. For example, a call to an address without code
-  returns `0x`, which cannot be decoded as a `uint256`.
+- A failed call throws [`GhostcallSubcallError`](/api/subcall-error/) with
+  `kind: "call"` and its revert data.
+- A result that cannot be decoded throws `GhostcallSubcallError` with
+  `kind: "decode"` and the decoder's error as `cause`. For example, a call to
+  an address without code returns `0x`, which is not a valid `uint256`.
 - A response with a different entry count throws `Error`.
 
 Provider and transport errors pass through unchanged.

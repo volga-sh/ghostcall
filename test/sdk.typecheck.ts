@@ -2,8 +2,10 @@ import { Abi } from "ox";
 import {
 	aggregateDecodedCalls,
 	type GhostcallAbiCall,
+	type GhostcallCall,
 	type GhostcallDecodedCall,
 	type GhostcallProvider,
+	GhostcallSubcallError,
 	type Hex,
 } from "../src/sdk/index.ts";
 
@@ -196,4 +198,16 @@ async function checkDynamicAbi(
 	assertType<Equal<typeof results, [unknown]>>();
 }
 
-void [checkDecodedTypes, checkSharedNames, checkDynamicAbi];
+function checkSubcallError(error: unknown, call: GhostcallCall): void {
+	if (!(error instanceof GhostcallSubcallError)) return;
+	assertType<Equal<typeof error.kind, "call" | "decode">>();
+	const fields = { index: 0, call, returnData: "0x" } as const;
+	// A decoder may throw undefined, so `cause` only needs to be present.
+	new GhostcallSubcallError({ kind: "decode", ...fields, cause: undefined });
+	// @ts-expect-error A decoding failure must carry the decoder's error.
+	new GhostcallSubcallError({ kind: "decode", ...fields });
+	// @ts-expect-error A failed call has no decoder error.
+	new GhostcallSubcallError({ kind: "call", ...fields, cause: 1 });
+}
+
+void [checkDecodedTypes, checkSharedNames, checkDynamicAbi, checkSubcallError];

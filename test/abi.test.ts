@@ -201,6 +201,7 @@ test("ABI subcall failures expose the executed calldata and raw revert data", as
 		]),
 		(error: unknown) => {
 			assert.ok(error instanceof GhostcallSubcallError);
+			assert.equal(error.kind, "call");
 			assert.equal(error.call.data, "0x18160ddd");
 			assert.equal(error.returnData, "0xdeadbeef");
 			return true;

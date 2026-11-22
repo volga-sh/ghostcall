@@ -29,10 +29,11 @@ test("ghostcall integration", async (t) => {
 				{ to, data: "0x11111111" },
 				{ to, data: "0x22222222" },
 			] as const;
-			await assert.rejects(
-				aggregateCalls(transport, calls),
-				GhostcallSubcallError,
-			);
+			await assert.rejects(aggregateCalls(transport, calls), {
+				name: "GhostcallSubcallError",
+				kind: "call",
+				index: 0,
+			});
 			const [failure, success] = await aggregateCalls(transport, [
 				{ ...calls[0], allowFailure: true },
 				calls[1],
@@ -94,10 +95,7 @@ test("ghostcall integration", async (t) => {
 				aggregateDecodedCalls(transport, calls),
 				(error: unknown) => {
 					assert.ok(error instanceof GhostcallSubcallError);
-					assert.equal(
-						error.message,
-						"ghostcall subcall 1 result could not be decoded",
-					);
+					assert.equal(error.kind, "decode");
 					assert.equal(error.index, 1);
 					assert.equal(error.call.to, codeless);
 					assert.equal(error.call.data, AbiFunction.encodeData(balance, [to]));
