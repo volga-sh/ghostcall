@@ -76,7 +76,7 @@ for (const count of [1, 100, 700]) {
 		data: `0x70a08231${"00".repeat(32)}`,
 		decodeResult: (data) => data.length,
 	}));
-	const response: Hex = `0x${`8020${"ab".repeat(32)}`.repeat(count)}`;
+	const response: Hex = `0x${`0041${"ab".repeat(32)}`.repeat(count)}`;
 	const provider: GhostcallProvider = {
 		request: async ({ params }) => {
 			const [{ data }] = params as [{ data: Hex }, string];

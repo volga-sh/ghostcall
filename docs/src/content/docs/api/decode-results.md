@@ -13,7 +13,7 @@ description: Parse the raw response returned by ghostcall.
 ```ts twoslash
 import { decodeResults } from "@volga-sh/evm-ghostcall";
 
-const results = decodeResults("0x8002cafe0004deadbeef");
+const results = decodeResults("0x0005cafe0008deadbeef");
 // [
 //   { success: true, returnData: "0xcafe" },
 //   { success: false, returnData: "0xdeadbeef" },

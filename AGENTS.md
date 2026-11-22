@@ -154,7 +154,7 @@ Do not add runtime validation for anything the types already express.
 - Fail fast on malformed caller input.
 - Preserve deterministic behavior for batch ordering and packed output shape.
 - Bubble provider and transport failures unless extra context materially improves debugging.
-- Keep top-level protocol failure behavior intentional. The Yul program reverts with empty data only for return-size overflow, which it alone can detect; preserve that unless the protocol itself is being revised.
+- Keep top-level protocol failure behavior intentional. The Yul program halts with an EVM error only for return-size overflow, which it alone can detect; preserve that unless the protocol itself is being revised.
 
 ## Security Considerations
 
@@ -163,7 +163,7 @@ Do not add runtime validation for anything the types already express.
 ### Critical Safety Requirements
 
 1. Treat encoding, decoding, and ordering bugs as security-relevant correctness issues.
-2. Preserve fail-closed behavior: the SDK rejects malformed input and truncated responses, and the Yul program reverts on return-size overflow.
+2. Preserve fail-closed behavior: the SDK rejects malformed input and truncated responses, and the Yul program halts on return-size overflow.
 3. Treat wire-format limits as protocol constraints, not advisory suggestions.
 4. Keep bit packing, offsets, and size constants named and explained.
 5. Any change to public semantics must come with tests and documentation updates.

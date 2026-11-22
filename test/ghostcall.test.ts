@@ -42,11 +42,7 @@ test("ghostcall integration", async (t) => {
 		},
 	);
 
-	await t.test("executes empty batches", async () => {
-		assert.deepEqual(await aggregateCalls(transport, []), []);
-	});
-
-	await t.test("packs unaligned results after staging calldata", async () => {
+	await t.test("packs unaligned results", async () => {
 		const cases = [
 			[`0x${"aa".repeat(40)}`, "0xaa"],
 			[`0x${"bb".repeat(7)}`, "0xbbccdd"],
@@ -99,7 +95,7 @@ test("ghostcall integration", async (t) => {
 	);
 });
 
-test("packs entries up to the uint15 header and reverts with empty data beyond it", async (t) => {
+test("packs entries up to the uint15 header and halts with an EVM error beyond it", async (t) => {
 	// Raise anvil's returned-code limit so only ghostcall's own limits apply.
 	const { transport, to, write } = await setupMock(t, 65536);
 	const maxEntry: Hex = `0x${"11".repeat(0x7fff)}`;
@@ -129,5 +125,5 @@ test("packs entries up to the uint15 header and reverts with empty data beyond i
 		},
 		{ raw: true },
 	);
-	assert.equal(response.error?.data, "0x");
+	assert.equal(response.error?.message, "EVM error OutOfOffset");
 });

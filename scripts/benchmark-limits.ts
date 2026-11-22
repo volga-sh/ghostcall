@@ -10,6 +10,7 @@ import {
 	encodeCalls,
 	type GhostcallCall,
 	type GhostcallProvider,
+	ghostcallInitcode,
 	type Hex,
 } from "../src/sdk/index.ts";
 
@@ -290,7 +291,7 @@ async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
 	// Fail fast on an unreachable endpoint before running any probes.
 	const chainId = await rpc("eth_chainId", []);
 	const latestBlock = await rpc("eth_blockNumber", []);
-	const ghostcallInitcodeBytes = hexSize(encodeCalls([]));
+	const ghostcallInitcodeBytes = hexSize(ghostcallInitcode);
 	const runsRaw = config.mode !== "balances";
 	const rawInitcode = runsRaw
 		? await findLimit(

@@ -102,10 +102,10 @@ class GhostcallSubcallError extends Error {
 const callHeaderSize = 22;
 const calldataLengthHexChars = 4;
 const maxCalldataSize = 0xffff;
-// Result entries: [success bit | uint15 returndata length][returndata].
+// Result entries: [uint15 returndata length | success bit][returndata].
 const resultHeaderHexChars = 4;
-const successFlag = 0x8000;
-const returnDataLengthMask = 0x7fff;
+const successFlag = 1;
+const returnDataLengthShift = 1;
 // EIP-3860 initcode limit.
 const defaultMaxInitcodeBytes = 0xc000;
 const bundledInitcodeSize = hexSize(ghostcallInitcode);
@@ -113,11 +113,15 @@ const bundledInitcodeSize = hexSize(ghostcallInitcode);
 /**
  * Build CREATE-style eth_call data: initcode followed by [length (2)][target (20)][data].
  * Send without a `to` address. Invalid inputs throw TypeError; size limits throw RangeError.
+ * The program needs at least one call, so an empty list also throws RangeError.
  */
 function encodeCalls(
 	calls: readonly GhostcallCall[],
 	{ maxInitcodeBytes = defaultMaxInitcodeBytes }: GhostcallEncodeOptions = {},
 ): Hex {
+	if (calls.length === 0) {
+		throw new RangeError("calls must contain at least one call");
+	}
 	let encodedData: Hex = ghostcallInitcode;
 	let totalEncodedSize = bundledInitcodeSize;
 	const sizeError = `encoded ghostcall initcode exceeds the ${maxInitcodeBytes}-byte CREATE initcode limit`;
@@ -187,7 +191,7 @@ async function aggregateDecodedCalls<
 	}) as GhostcallDecodedResults<TCalls>;
 }
 
-/** Decode ordered [success bit | uint15 length][returndata] entries. Reject malformed data. */
+/** Decode ordered [uint15 length | success bit][returndata] entries. Reject malformed data. */
 function decodeResults(data: Hex): GhostcallResult[] {
 	return decodeValidatedResults(assertHex(data, "data"));
 }
@@ -198,6 +202,8 @@ async function executeCalls(
 	calls: readonly GhostcallCall[],
 	options: GhostcallAggregateOptions = {},
 ): Promise<GhostcallResult[]> {
+	// The program needs at least one entry, so an empty batch skips the RPC.
+	if (calls.length === 0) return [];
 	const { from, gas, blockTag = "latest" } = options.ethCall ?? {};
 	const ethCall = {
 		data: encodeCalls(calls, options),
@@ -231,7 +237,7 @@ function decodeValidatedResults(data: Hex): GhostcallResult[] {
 	while (cursor < data.length) {
 		const start = cursor + resultHeaderHexChars;
 		const header = Number.parseInt(data.slice(cursor, start), 16);
-		cursor = start + (header & returnDataLengthMask) * 2;
+		cursor = start + (header >> returnDataLengthShift) * 2;
 		// A partial header also ends past the data, so one check covers both cases.
 		if (cursor > data.length) {
 			throw new TypeError("Truncated ghostcall response");
@@ -280,4 +286,5 @@ export {
 	decodeResults,
 	encodeCalls,
 	GhostcallSubcallError,
+	ghostcallInitcode,
 };

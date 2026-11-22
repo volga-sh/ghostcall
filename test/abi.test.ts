@@ -23,7 +23,10 @@ const abi = Abi.from([
 /** Pack successful return data as a ghostcall response. */
 function successResponse(...returnData: Hex[]): Hex {
 	return `0x${returnData
-		.map((data) => `${(0x8000 | hexSize(data)).toString(16)}${data.slice(2)}`)
+		.map((data) => {
+			const header = hexSize(data) * 2 + 1;
+			return `${header.toString(16).padStart(4, "0")}${data.slice(2)}`;
+		})
 		.join("")}`;
 }
 
@@ -193,7 +196,7 @@ test("invalid dynamic ABI calls fail before RPC", async (t) => {
 
 test("ABI subcall failures expose the executed calldata and raw revert data", async () => {
 	await assert.rejects(
-		aggregateDecodedCalls({ request: async () => "0x0004deadbeef" }, [
+		aggregateDecodedCalls({ request: async () => "0x0008deadbeef" }, [
 			{ to, abi, functionName: "totalSupply" },
 		]),
 		(error: unknown) => {

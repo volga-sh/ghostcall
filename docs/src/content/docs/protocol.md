@@ -54,13 +54,14 @@ N bytes calldata
 ```
 
 There is no call count. The program reads entries until it reaches the end of
-the request data.
+the request data, and it needs at least one entry.
 
 `encodeCalls()` checks addresses, hex strings, calldata lengths, and the full
 request size. The program itself does not validate the request bytes, which
-keeps it small: a truncated entry is padded with zero bytes and still executed,
-and stray trailing bytes become an extra call. Manually built bytes must follow
-the same layout; results from malformed requests are not defined.
+keeps it small: a truncated entry is padded with zero bytes or earlier result
+bytes and still executed, and stray trailing bytes become an extra call. Manually
+built bytes must follow the same layout; results from malformed requests are not
+defined.
 
 ## Response bytes
 
@@ -71,11 +72,11 @@ The response contains one entry per call:
 N bytes return data
 ```
 
-The header uses:
+The header is a big-endian uint16:
 
 ```text
-bit 15    call success
-bits 0-14 return data length (big-endian uint15)
+bits 1-15 return data length
+bit 0     call success
 ```
 
 A reverted call is still a response entry. Its success bit is `0`, and its
@@ -83,7 +84,7 @@ return data contains the revert data when available.
 
 ## Whole-request failure
 
-The ghostcall program reverts with empty data if one call returns more than
+The ghostcall program halts with an EVM error if one call returns more than
 `32,767` bytes. This check must happen in the program because return size is not
 known before execution.
 

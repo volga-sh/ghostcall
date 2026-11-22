@@ -53,10 +53,11 @@ for the byte layout.
 - Each `to` must be a 20-byte address. Each `data` must be even-length,
   `0x`-prefixed hex of at most `65,535` bytes. `allowFailure` is ignored.
 - `maxInitcodeBytes` caps the complete request and defaults to `49,152`.
-- An empty call list is valid and returns only the ghostcall program.
+- `calls` needs at least one call. Import `ghostcallInitcode` for the program
+  alone.
 
 ## Throws
 
 - `TypeError` for an invalid address or hex value.
-- `RangeError` when one call contains more than `65,535` bytes of calldata, or
-  the complete request exceeds `maxInitcodeBytes`.
+- `RangeError` when `calls` is empty, one call contains more than `65,535` bytes
+  of calldata, or the complete request exceeds `maxInitcodeBytes`.
