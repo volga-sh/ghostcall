@@ -7,14 +7,14 @@ This page is for contributors working in the ghostcall repository. Run all
 commands from the repository root.
 
 Use the Node.js LTS release pinned in `.nvmrc` (CI uses the same pin), npm
-12.1.0, and Foundry v1.8.3. `foundry.toml` pins Solidity 0.8.37 and keeps the
+12.2.3, and Foundry v1.9.0. `foundry.toml` pins Solidity 0.8.39 and keeps the
 Prague EVM target for compatibility.
 
 ## Install and check the project
 
 ```sh
 nvm install
-npm install --global npm@12.1.0
+npm install --global npm@12.2.3
 npm ci
 npm run build:sdk
 npm run test
@@ -72,15 +72,18 @@ Reference signatures and type definitions use queries on SDK imports, so they
 follow the source without maintaining separate declarations or drift checks.
 Usage examples show types on hover only; do not add queries to them.
 
+`biome.json` turns off Biome's Markdown formatter, which would reindent those
+query lines.
+
 The docs pin TypeScript 5.9 because twoslash needs the compiler API that
 TypeScript 7 does not ship, and override expressive-code-twoslash's peer range
 to the expressive-code version Starlight installs. Update that override when
 upgrading Starlight.
 
-npm 12 blocks dependency install scripts by default. `docs/package.json` allows
-the pinned esbuild binary setup script; fsevents uses its bundled macOS binary
-without rebuilding it. Review and update the esbuild approval when its version
-changes.
+npm 12 blocks dependency install scripts by default. `docs/package.json` denies
+the fsevents script, the only one in the docs dependency tree; fsevents uses
+its bundled macOS binary without rebuilding it. Review any new entry npm asks
+for when dependencies change.
 
 ## Repository map
 

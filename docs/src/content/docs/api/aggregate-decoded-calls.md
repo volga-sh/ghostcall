@@ -49,7 +49,9 @@ results and is validated during encoding.
 
 Overloaded functions are resolved using the supplied arguments. Encoding and
 decoding use the same resolved function. If ox reports ambiguous overloads,
-pass an ABI containing the specific overload you intend to call.
+pass an ABI containing the specific overload you intend to call. Only functions
+are candidates: an event or error that shares the name is ignored. Arguments
+that match no overload throw before the request is sent.
 
 One output becomes a scalar; multiple outputs form an ordered tuple. A function
 with no outputs returns `undefined`. These are ox's decoding conventions.
