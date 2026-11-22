@@ -3,6 +3,7 @@ import { size as hexSize, validate as isHex } from "ox/Hex";
 
 import {
 	type GhostcallAbiCall,
+	type GhostcallAbiCallInput,
 	type GhostcallAbiResult,
 	prepareDecodedCalls,
 } from "./abi.ts";
@@ -35,7 +36,7 @@ type GhostcallDecodedCall<TResult = unknown> = {
 /** One subcall result. Failed calls carry their revert data in returnData. */
 type GhostcallResult = { success: boolean; returnData: Hex };
 
-type GhostcallDecodedInput = GhostcallAbiCall | GhostcallDecodedCall;
+type GhostcallDecodedInput = GhostcallAbiCallInput | GhostcallDecodedCall;
 
 // Distribute over mixed call unions while retaining each tuple position.
 type ValidatedDecodedCall<TCall extends GhostcallDecodedInput> =
@@ -172,14 +173,17 @@ async function aggregateCalls(
 
 /**
  * Execute ABI-described calls or raw calls with custom decoders. Each tuple position
- * retains its result type. Any failed call throws; encoding/decoding errors pass through.
+ * retains its result type; calls mapped from a list return an array of their result
+ * type. Any failed call throws; encoding/decoding errors pass through.
  * ABI-decoded addresses are checksummed, including addresses nested in tuples or arrays.
  */
 async function aggregateDecodedCalls<
 	const TCalls extends readonly GhostcallDecodedInput[],
 >(
 	provider: GhostcallProvider,
-	calls: TCalls & NoInfer<ValidatedDecodedCalls<TCalls>>,
+	// Keep TCalls last: with TCalls first, objects returned from `.map` lose
+	// their literal types.
+	calls: NoInfer<ValidatedDecodedCalls<TCalls>> & TCalls,
 	options?: GhostcallAggregateOptions,
 ): Promise<GhostcallDecodedResults<TCalls>> {
 	const preparedCalls = prepareDecodedCalls(calls);

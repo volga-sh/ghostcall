@@ -199,65 +199,13 @@ async function checkDynamicAbi(
 async function checkMappedCalls(
 	provider: GhostcallProvider,
 	tokens: readonly Hex[],
+	runtimeAbi: Abi.Abi,
+	runtimeName: string,
 ): Promise<void> {
-	const abi = Abi.from([
-		"function balanceOf(address owner) view returns (uint256)",
-		"function decimals() view returns (uint8)",
-		"event Transfer(address indexed from, address indexed to, uint256 amount)",
-	]);
-	// `satisfies` checks each mapped call against the ABI where it is written and
-	// keeps its literal function name and argument tuple.
+	// An object returned from `.map` keeps its literal name and arguments,
+	// including struct fields and argument-selected overloads.
 	const balances = await aggregateDecodedCalls(
 		provider,
-		tokens.map(
-			(token) =>
-				({
-					to: token,
-					abi,
-					functionName: "balanceOf",
-					args: [to],
-				}) satisfies GhostcallAbiCall<typeof abi>,
-		),
-	);
-	assertType<Equal<typeof balances, bigint[]>>();
-	const constBalances = await aggregateDecodedCalls(
-		provider,
-		tokens.map(
-			(token) =>
-				({ to: token, abi, functionName: "balanceOf", args: [to] }) as const,
-		),
-	);
-	assertType<Equal<typeof constBalances, bigint[]>>();
-	// A mapped array spread into a literal tuple keeps the fixed positions.
-	const mixed = await aggregateDecodedCalls(provider, [
-		{ to, abi, functionName: "decimals" },
-		...tokens.map(
-			(token) =>
-				({ to: token, abi, functionName: "balanceOf", args: [to] }) as const,
-		),
-	]);
-	assertType<Equal<typeof mixed, [number, ...bigint[]]>>();
-	// The ABI's call type covers every function, so annotating with it widens
-	// each result to the union of the ABI's result types.
-	const annotated = await aggregateDecodedCalls(
-		provider,
-		tokens.map(
-			(token): GhostcallAbiCall<typeof abi> => ({
-				to: token,
-				abi,
-				functionName: "balanceOf",
-				args: [to],
-			}),
-		),
-	);
-	assertType<Equal<typeof annotated, (bigint | number)[]>>();
-	// `.map` takes its callback's contextual type from the constraint of
-	// aggregateDecodedCalls, which cannot name this ABI's functions, so a plain
-	// object widens `functionName` to string. This fails until TypeScript or the
-	// signature changes; the docs describe the workaround.
-	aggregateDecodedCalls(
-		provider,
-		// @ts-expect-error A plain mapped object loses its literal function name.
 		tokens.map((token) => ({
 			to: token,
 			abi,
@@ -265,6 +213,100 @@ async function checkMappedCalls(
 			args: [to],
 		})),
 	);
+	assertType<Equal<typeof balances, bigint[]>>();
+	const positions = await aggregateDecodedCalls(
+		provider,
+		tokens.map((token) => ({
+			to: token,
+			abi,
+			functionName: "positions",
+			args: [[{ owner: to, amount: 1n }]],
+		})),
+	);
+	assertType<
+		Equal<typeof positions, (readonly { owner: Hex; amount: bigint }[])[]>
+	>();
+	const lookups = await aggregateDecodedCalls(
+		provider,
+		tokens.map((token) => ({
+			to: token,
+			abi,
+			functionName: "lookup",
+			args: [token],
+		})),
+	);
+	assertType<Equal<typeof lookups, string[]>>();
+	// Names of any case and fixed-size array arguments stay literal too.
+	const otherAbi = Abi.from([
+		"function DOMAIN_SEPARATOR() view returns (bytes32)",
+		"function isPair(address[2] pair) view returns (bool)",
+	]);
+	const separators = await aggregateDecodedCalls(
+		provider,
+		tokens.map((token) => ({
+			to: token,
+			abi: otherAbi,
+			functionName: "DOMAIN_SEPARATOR",
+		})),
+	);
+	assertType<Equal<typeof separators, Hex[]>>();
+	const pairs = await aggregateDecodedCalls(
+		provider,
+		tokens.map((token) => ({
+			to: token,
+			abi: otherAbi,
+			functionName: "isPair",
+			args: [[to, token]],
+		})),
+	);
+	assertType<Equal<typeof pairs, boolean[]>>();
+	const dynamic = await aggregateDecodedCalls(
+		provider,
+		tokens.map((token) => ({
+			to: token,
+			abi: runtimeAbi,
+			functionName: runtimeName,
+		})),
+	);
+	assertType<Equal<typeof dynamic, unknown[]>>();
+
+	aggregateDecodedCalls(
+		provider,
+		// @ts-expect-error The ABI still checks mapped function names.
+		tokens.map((token) => ({
+			to: token,
+			abi,
+			functionName: "balanceOff",
+			args: [to],
+		})),
+	);
+	aggregateDecodedCalls(
+		provider,
+		// @ts-expect-error The ABI still checks mapped arguments.
+		tokens.map((token) => ({
+			to: token,
+			abi,
+			functionName: "balanceOf",
+			args: [1n],
+		})),
+	);
+
+	// A list mapped before the call has no batch to take literal types from,
+	// so its objects need `as const`.
+	const stored = tokens.map((token) => ({
+		to: token,
+		abi,
+		functionName: "balanceOf",
+		args: [to],
+	}));
+	// @ts-expect-error `functionName` widened to string before the call.
+	aggregateDecodedCalls(provider, stored);
+	const storedConst = tokens.map(
+		(token) =>
+			({ to: token, abi, functionName: "balanceOf", args: [to] }) as const,
+	);
+	const storedResults = await aggregateDecodedCalls(provider, storedConst);
+	assertType<Equal<typeof storedResults, bigint[]>>();
 }
 
 void [checkDecodedTypes, checkSharedNames, checkDynamicAbi, checkMappedCalls];
