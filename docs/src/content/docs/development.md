@@ -7,7 +7,7 @@ This page is for contributors working in the ghostcall repository. Run all
 commands from the repository root.
 
 Use the Node.js LTS release pinned in `.nvmrc` (CI uses the same pin), npm
-12.2.3, and Foundry v1.9.0. `foundry.toml` pins Solidity 0.8.39 and keeps the
+12.2.3, and Foundry v1.10.0. `foundry.toml` pins Solidity 0.8.39 and keeps the
 Prague EVM target for compatibility.
 
 ## Install and check the project
