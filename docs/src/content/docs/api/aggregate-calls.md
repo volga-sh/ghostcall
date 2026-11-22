@@ -4,8 +4,8 @@ description: Send a batch and return raw success or failure results.
 ---
 
 `aggregateCalls()` sends one `eth_call` and returns one
-[`GhostcallResult`](/api/types/) per call, in call order. Use it when success
-flags or revert data are needed, or when selected calls may fail.
+[`GhostcallResult`](/api/types/) per call, in call order. Use it when raw
+success flags and return data are needed rather than decoded values.
 
 ## Usage
 
@@ -64,12 +64,12 @@ const [result] = await aggregateCalls(client, [{ to: weth, data: "0x18160ddd" }]
 
 - `TypeError` for invalid addresses, hex data, or provider responses.
 - `RangeError` when one call or the full request exceeds its size limit.
-- [`GhostcallSubcallError`](/api/subcall-error/) when a call fails without
-  `allowFailure: true`.
+- [`GhostcallSubcallError`](/api/subcall-error/) with `kind: "call"` when a
+  call fails without `allowFailure: true`.
 - `Error` when the response contains a different number of results than the
   request.
 
 Provider and transport errors pass through unchanged.
 
-Use [`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/) when every call
-must succeed and decoded values are needed.
+Use [`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/) when decoded
+values are needed, including from calls that are allowed to fail.

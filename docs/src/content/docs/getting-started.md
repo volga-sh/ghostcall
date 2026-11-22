@@ -52,14 +52,14 @@ Function names and argument types are checked against the ABI. Use a literal
 ABI (`as const`), viem's `parseAbi`, or ox's `Abi.from` to preserve inference;
 ABIs loaded at runtime still work, but their results have type `unknown`.
 
-If either call fails, `aggregateDecodedCalls()` throws a
-[`GhostcallSubcallError`](/api/subcall-error/).
+If either call fails or its result cannot be decoded, `aggregateDecodedCalls()`
+throws a [`GhostcallSubcallError`](/api/subcall-error/) that identifies the call.
 
 ## Next
 
-- [`aggregateCalls()`](/api/aggregate-calls/) lets selected calls fail and sets
-  the block, sender, or gas.
-- [`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/) covers overloads and
-  custom decoders for raw calldata.
+- [`aggregateCalls()`](/api/aggregate-calls/) returns raw success flags and
+  return data, and sets the block, sender, or gas.
+- [`aggregateDecodedCalls()`](/api/aggregate-decoded-calls/) covers overloads,
+  calls allowed to fail, and custom decoders for raw calldata.
 - [`encodeCalls()`](/api/encode-calls/) builds the request when the application
   sends the RPC call itself.

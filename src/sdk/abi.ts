@@ -25,21 +25,50 @@ type FunctionCall<TFunction extends AbiFunction.AbiFunction> =
 /**
  * An ABI-described call. A literal ABI determines valid function names and args.
  * Use `as const` or an ABI parser to retain those literal types.
+ * `TAllowFailure` is the call's failure policy; see `FailurePolicy`.
  */
-type GhostcallAbiCall<TAbi extends Abi = Abi> = {
+type GhostcallAbiCall<
+	TAbi extends Abi = Abi,
+	TAllowFailure extends boolean = false,
+> = {
 	to: Hex;
 	abi: TAbi;
 	data?: never;
 	decodeResult?: never;
-	allowFailure?: never;
-} & (Abi extends TAbi
-	? { functionName: string; args?: readonly unknown[] }
-	: FunctionCall<FunctionsOf<TAbi>[number]>);
+} & FailurePolicy<TAllowFailure> &
+	(Abi extends TAbi
+		? { functionName: string; args?: readonly unknown[] }
+		: FunctionCall<FunctionsOf<TAbi>[number]>);
 
-type CallFunctionName<TCall extends GhostcallAbiCall> = TCall["functionName"] &
+/**
+ * The `allowFailure` field of a decoded-call type. Setting it changes the shape
+ * of that position's result, so a type that permits failure must say so: `true`
+ * requires the field, `false` forbids `true`, and `boolean` leaves the policy to
+ * runtime, which types the result as either shape.
+ */
+type FailurePolicy<TAllowFailure extends boolean> =
+	boolean extends TAllowFailure
+		? {
+				/** Return a failure result instead of throwing. Default: false. */
+				allowFailure?: boolean;
+			}
+		: TAllowFailure extends true
+			? {
+					/** Return a failure result instead of throwing. */
+					allowFailure: true;
+				}
+			: {
+					/** Throw GhostcallSubcallError when this call fails. */
+					allowFailure?: false;
+				};
+
+// Any ABI call, whatever its failure policy.
+type AbiCall = GhostcallAbiCall<Abi, boolean>;
+
+type CallFunctionName<TCall extends AbiCall> = TCall["functionName"] &
 	AbiItem.Name<FunctionsOf<TCall["abi"]>>;
 
-type CallArguments<TCall extends GhostcallAbiCall> = TCall extends {
+type CallArguments<TCall extends AbiCall> = TCall extends {
 	args: infer TArgs extends readonly unknown[];
 }
 	? TArgs
@@ -47,7 +76,7 @@ type CallArguments<TCall extends GhostcallAbiCall> = TCall extends {
 
 // Infer ox's argument constraint through its public options, then let ox choose
 // the overload. This keeps our result types aligned with runtime resolution.
-type ResolvedFunction<TCall extends GhostcallAbiCall> =
+type ResolvedFunction<TCall extends AbiCall> =
 	AbiItem.fromAbi.Options<
 		FunctionsOf<TCall["abi"]>,
 		CallFunctionName<TCall>
@@ -64,7 +93,7 @@ type ResolvedFunction<TCall extends GhostcallAbiCall> =
 		: never;
 
 /** The decoded result of an ABI call, including argument-selected overloads. */
-type GhostcallAbiResult<TCall extends GhostcallAbiCall> =
+type GhostcallAbiResult<TCall extends AbiCall> =
 	AbiFunction.decodeResult.ReturnType<
 		Extract<ResolvedFunction<TCall>, AbiFunction.AbiFunction>
 	>;
@@ -82,10 +111,10 @@ type SharedFunctionsByAbi = Map<Abi, SharedFunctions>;
  * resolved function. Raw decoded calls pass through unchanged.
  */
 function prepareDecodedCalls(
-	calls: readonly (GhostcallAbiCall | GhostcallDecodedCall)[],
-): GhostcallDecodedCall[] {
+	calls: readonly (AbiCall | GhostcallDecodedCall<unknown, boolean>)[],
+): GhostcallDecodedCall<unknown, boolean>[] {
 	const sharedFunctions: SharedFunctionsByAbi = new Map();
-	return calls.map((call): GhostcallDecodedCall => {
+	return calls.map((call): GhostcallDecodedCall<unknown, boolean> => {
 		if (call.abi === undefined) return call;
 		const args = call.args ?? [];
 		const abiFunction = resolveAbiFunction(call, args, sharedFunctions);
@@ -101,6 +130,7 @@ function prepareDecodedCalls(
 			data: AbiFunction.encodeData(abiFunction, args),
 			decodeResult: (returnData) =>
 				AbiFunction.decodeResult(abiFunction, returnData),
+			...(call.allowFailure && { allowFailure: true }),
 		};
 	});
 }
@@ -109,7 +139,7 @@ function prepareDecodedCalls(
 // once when it can. ox ignores args when exactly one of the functions has the
 // name. Other names resolve per call, by argument types.
 function resolveAbiFunction(
-	call: GhostcallAbiCall,
+	call: AbiCall,
 	args: readonly unknown[],
 	sharedFunctions: SharedFunctionsByAbi,
 ): AbiFunction.AbiFunction {
@@ -144,5 +174,5 @@ function resolveAbiFunction(
 	return resolved;
 }
 
-export type { GhostcallAbiCall, GhostcallAbiResult };
+export type { FailurePolicy, GhostcallAbiCall, GhostcallAbiResult };
 export { prepareDecodedCalls };

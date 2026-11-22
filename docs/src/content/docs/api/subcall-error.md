@@ -1,10 +1,19 @@
 ---
 title: GhostcallSubcallError
-description: Inspect a contract call that caused a batch to throw.
+description: Identify the contract call that caused a batch to throw, and why.
 ---
 
-`aggregateDecodedCalls()` throws `GhostcallSubcallError` for any failed call.
-`aggregateCalls()` throws it unless that entry sets `allowFailure: true`.
+`GhostcallSubcallError` identifies a call that failed or whose result could
+not be decoded, and its `kind` says which:
+
+- `"call"`: the call failed. `aggregateCalls()` and `aggregateDecodedCalls()`
+  throw this unless the entry sets `allowFailure: true`.
+- `"decode"`: the call succeeded, but its result could not be decoded. Only
+  `aggregateDecodedCalls()` reports this.
+
+An `aggregateDecodedCalls()` entry with `allowFailure: true` returns either kind
+as its result's `error` instead of throwing it; see
+[Allowing failures](/api/aggregate-decoded-calls/#allowing-failures).
 
 ```ts twoslash
 import { aggregateCalls, GhostcallSubcallError } from "@volga-sh/evm-ghostcall";
@@ -18,17 +27,46 @@ try {
 	]);
 } catch (error) {
 	if (!(error instanceof GhostcallSubcallError)) throw error;
-	console.log(error.index, error.call, error.returnData);
+	console.log(error.index, error.kind, error.returnData);
 }
 ```
 
-The error extends `Error` with three readonly properties:
+The error extends `Error` with these properties:
 
 | Property | Type | Meaning |
 | --- | --- | --- |
-| `index` | `number` | Zero-based position of the failed call. |
-| `call` | `GhostcallCall` | The executed raw entry. ABI calls expose the target and prepared calldata. |
-| `returnData` | `Hex` | The raw revert data, or `0x` when the call reverted without data. |
+| `index` | `number` | Zero-based position of the call. |
+| `call` | `GhostcallCall` | The raw entry that ran. For ABI calls, this is the target and encoded calldata. |
+| `kind` | `"call" \| "decode"` | Whether the call failed or its result could not be decoded. |
+| `returnData` | `Hex` | For `"call"`, the revert data. For `"decode"`, the result that could not be decoded. |
+| `cause` | `unknown` | For `"decode"` only: the error the decoder threw. |
 
-The outer request completed, but an inner call failed. Provider, transport,
-encoding, and decoding errors pass through with their original types.
+## Decoding failures
+
+A call can succeed but return data that cannot be decoded. For example, a call
+to an address without code succeeds and returns `0x`, which is not a valid
+`uint256`:
+
+```ts twoslash
+import { aggregateDecodedCalls, GhostcallSubcallError } from "@volga-sh/evm-ghostcall";
+import { erc20Abi } from "viem";
+
+const token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+const codeless = "0x000000000000000000000000000000000000dEaD";
+const owner = "0x28C6c06298d514Db089934071355E5743bf21d60";
+
+try {
+	await aggregateDecodedCalls(client, [
+		{ to: token, abi: erc20Abi, functionName: "balanceOf", args: [owner] },
+		{ to: codeless, abi: erc20Abi, functionName: "balanceOf", args: [owner] },
+	]);
+} catch (error) {
+	if (!(error instanceof GhostcallSubcallError)) throw error;
+	if (error.kind === "decode") {
+		// 1, the codeless address, and ox's ZeroDataError
+		console.log(error.index, error.call.to, error.cause);
+	}
+}
+```
+
+Provider, transport, and encoding errors pass through unchanged.

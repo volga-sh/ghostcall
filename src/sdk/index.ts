@@ -1,7 +1,9 @@
+import type { Abi } from "ox/Abi";
 import { validate as isAddress } from "ox/Address";
 import { size as hexSize, validate as isHex } from "ox/Hex";
 
 import {
+	type FailurePolicy,
 	type GhostcallAbiCall,
 	type GhostcallAbiResult,
 	prepareDecodedCalls,
@@ -20,8 +22,14 @@ type GhostcallCall = {
 	allowFailure?: boolean;
 };
 
-/** Raw calldata with a decoder that only receives successful return data. */
-type GhostcallDecodedCall<TResult = unknown> = {
+/**
+ * Raw calldata with a decoder that only receives successful return data.
+ * `TAllowFailure` is the call's failure policy, as for `GhostcallAbiCall`.
+ */
+type GhostcallDecodedCall<
+	TResult = unknown,
+	TAllowFailure extends boolean = false,
+> = {
 	to: Hex;
 	/** At most 65,535 bytes (the wire format stores a uint16 length). */
 	data: Hex;
@@ -29,33 +37,68 @@ type GhostcallDecodedCall<TResult = unknown> = {
 	abi?: never;
 	functionName?: never;
 	args?: never;
-	allowFailure?: never;
-};
+} & FailurePolicy<TAllowFailure>;
 
 /** One subcall result. Failed calls carry their revert data in returnData. */
 type GhostcallResult = { success: boolean; returnData: Hex };
 
-type GhostcallDecodedInput = GhostcallAbiCall | GhostcallDecodedCall;
+/**
+ * The result of a decoded call that sets allowFailure. A failure carries the
+ * GhostcallSubcallError the call would otherwise throw.
+ */
+type GhostcallDecodedResult<TResult = unknown> =
+	| { success: true; result: TResult }
+	| { success: false; error: GhostcallSubcallError };
+
+type GhostcallDecodedInput =
+	| GhostcallAbiCall<Abi, boolean>
+	| GhostcallDecodedCall<unknown, boolean>;
+
+// The policy a call's type guarantees: `boolean` when only runtime can tell.
+// `infer` instead of `extends { allowFailure?: false }`: a call without the
+// field shares no property with that all-optional type, so it would not match.
+type AllowFailureOf<TCall> = TCall extends { allowFailure: true }
+	? true
+	: TCall extends { allowFailure?: infer TFlag }
+		? true extends TFlag
+			? boolean
+			: false
+		: false;
 
 // Distribute over mixed call unions while retaining each tuple position.
 type ValidatedDecodedCall<TCall extends GhostcallDecodedInput> =
-	TCall extends GhostcallAbiCall ? GhostcallAbiCall<TCall["abi"]> : TCall;
+	TCall extends GhostcallAbiCall<Abi, boolean>
+		? GhostcallAbiCall<TCall["abi"], AllowFailureOf<TCall>>
+		: TCall;
 
 type ValidatedDecodedCalls<TCalls extends readonly GhostcallDecodedInput[]> = {
 	[Index in keyof TCalls]: ValidatedDecodedCall<TCalls[Index]>;
 };
 
-type DecodedResult<TCall extends GhostcallDecodedInput> =
-	TCall extends GhostcallAbiCall
+type DecodedValue<TCall extends GhostcallDecodedInput> =
+	TCall extends GhostcallAbiCall<Abi, boolean>
 		? GhostcallAbiResult<TCall>
-		: TCall extends GhostcallDecodedCall
+		: TCall extends GhostcallDecodedCall<unknown, boolean>
 			? ReturnType<TCall["decodeResult"]>
 			: never;
 
-type GhostcallDecodedResults<TCalls extends readonly GhostcallDecodedInput[]> =
-	{
-		-readonly [Index in keyof TCalls]: DecodedResult<TCalls[Index]>;
-	};
+type PolicyResult<
+	TResult,
+	TAllowFailure extends boolean,
+> = boolean extends TAllowFailure
+	? TResult | GhostcallDecodedResult<TResult>
+	: TAllowFailure extends true
+		? GhostcallDecodedResult<TResult>
+		: TResult;
+
+// Distribute over call unions so each call keeps its own failure policy.
+type DecodedResult<TCall extends GhostcallDecodedInput> = TCall extends unknown
+	? PolicyResult<DecodedValue<TCall>, AllowFailureOf<TCall>>
+	: never;
+
+type DecodedResults<TCalls extends readonly GhostcallDecodedInput[]> = {
+	-readonly [Index in keyof TCalls]: DecodedResult<TCalls[Index]>;
+};
 
 type GhostcallEncodeOptions = {
 	/** Full CREATE request ceiling, including bundled initcode. Default: 49,152 bytes. */
@@ -83,17 +126,48 @@ type GhostcallProvider = {
 	request(args: { method: string; params?: unknown }): Promise<unknown>;
 };
 
-/** A disallowed failure, with its zero-based index, executed call, and revert data. */
+/** Why a call made the batch throw. A decoder may throw any value, even undefined. */
+type GhostcallSubcallErrorDetails =
+	| { kind: "call"; index: number; call: GhostcallCall; returnData: Hex }
+	| {
+			kind: "decode";
+			index: number;
+			call: GhostcallCall;
+			returnData: Hex;
+			cause: unknown;
+	  };
+
+/**
+ * A call that made the batch throw, or that an allowFailure entry of
+ * aggregateDecodedCalls returns as its failure. `kind` says why:
+ * - `"call"`: the call failed (revert, out of gas, invalid opcode). `returnData` is its revert data.
+ * - `"decode"`: the call succeeded, but its decoder threw on `returnData`. `cause` is the thrown value.
+ */
 class GhostcallSubcallError extends Error {
+	/** Zero-based position of the call in the batch. */
 	readonly index: number;
+	/** The entry that ran. For ABI calls: the target and encoded calldata. */
 	readonly call: GhostcallCall;
+	/** `"call"` if the call failed; `"decode"` if it succeeded and its decoder threw. */
+	readonly kind: "call" | "decode";
+	/** Revert data for `"call"`; the return data the decoder rejected for `"decode"`. */
 	readonly returnData: Hex;
 
-	constructor(index: number, call: GhostcallCall, returnData: Hex) {
-		super(`ghostcall subcall ${index} failed`);
+	// `cause` is not redeclared as a field: under ESNext class-field semantics a
+	// field declaration would overwrite the value that super() stores.
+	constructor(details: GhostcallSubcallErrorDetails) {
+		const { index, call, kind, returnData } = details;
+		const subcall = `ghostcall subcall ${index} to ${call.to}`;
+		super(
+			kind === "call"
+				? `${subcall} failed`
+				: `${subcall} succeeded, but its result could not be decoded`,
+			details.kind === "decode" ? { cause: details.cause } : undefined,
+		);
 		this.name = "GhostcallSubcallError";
 		this.index = index;
 		this.call = call;
+		this.kind = kind;
 		this.returnData = returnData;
 	}
 }
@@ -150,8 +224,8 @@ function encodeCalls(
 }
 
 /**
- * Execute a raw batch in order. Failed calls throw GhostcallSubcallError unless
- * their entry sets allowFailure. Provider errors pass through unchanged.
+ * Execute a raw batch in order. Failed calls throw GhostcallSubcallError (kind "call")
+ * unless their entry sets allowFailure. Provider errors pass through unchanged.
  */
 async function aggregateCalls(
 	provider: GhostcallProvider,
@@ -163,7 +237,12 @@ async function aggregateCalls(
 	for (const { success, returnData } of results) {
 		const call = calls[index] as GhostcallCall;
 		if (!success && !call.allowFailure) {
-			throw new GhostcallSubcallError(index, call, returnData);
+			throw new GhostcallSubcallError({
+				kind: "call",
+				index,
+				call,
+				returnData,
+			});
 		}
 		index += 1;
 	}
@@ -172,7 +251,10 @@ async function aggregateCalls(
 
 /**
  * Execute ABI-described calls or raw calls with custom decoders. Each tuple position
- * retains its result type. Any failed call throws; encoding/decoding errors pass through.
+ * retains its result type. A call that fails or cannot be decoded produces a
+ * GhostcallSubcallError, whose `kind` says which; a decoder's error becomes its `cause`.
+ * An entry that sets allowFailure returns that error in a GhostcallDecodedResult at
+ * its position. Otherwise the first such error throws. Provider errors pass through.
  * ABI-decoded addresses are checksummed, including addresses nested in tuples or arrays.
  */
 async function aggregateDecodedCalls<
@@ -181,14 +263,48 @@ async function aggregateDecodedCalls<
 	provider: GhostcallProvider,
 	calls: TCalls & NoInfer<ValidatedDecodedCalls<TCalls>>,
 	options?: GhostcallAggregateOptions,
-): Promise<GhostcallDecodedResults<TCalls>> {
+): Promise<DecodedResults<TCalls>> {
 	const preparedCalls = prepareDecodedCalls(calls);
 	const results = await executeCalls(provider, preparedCalls, options);
 	return results.map(({ success, returnData }, index) => {
-		const call = preparedCalls[index] as GhostcallDecodedCall;
-		if (!success) throw new GhostcallSubcallError(index, call, returnData);
-		return call.decodeResult(returnData, index);
-	}) as GhostcallDecodedResults<TCalls>;
+		const call = preparedCalls[index] as GhostcallDecodedCall<unknown, boolean>;
+		const outcome = decodeOutcome(call, success, returnData, index);
+		// The failure policy only chooses whether the same outcome throws.
+		if (call.allowFailure) return outcome;
+		if (!outcome.success) throw outcome.error;
+		return outcome.result;
+	}) as DecodedResults<TCalls>;
+}
+
+/** Decode one result, capturing a failed call or a throwing decoder as an error. */
+function decodeOutcome(
+	call: GhostcallDecodedCall<unknown, boolean>,
+	success: boolean,
+	returnData: Hex,
+	index: number,
+): GhostcallDecodedResult {
+	if (!success) {
+		const error = new GhostcallSubcallError({
+			kind: "call",
+			index,
+			call,
+			returnData,
+		});
+		return { success: false, error };
+	}
+	try {
+		return { success: true, result: call.decodeResult(returnData, index) };
+	} catch (cause) {
+		// Decoder errors such as ox's ZeroDataError do not say which call failed.
+		const error = new GhostcallSubcallError({
+			kind: "decode",
+			index,
+			call,
+			returnData,
+			cause,
+		});
+		return { success: false, error };
+	}
 }
 
 /** Decode ordered [uint15 length | success bit][returndata] entries. Reject malformed data. */
@@ -275,6 +391,7 @@ export type {
 	GhostcallAggregateOptions,
 	GhostcallCall,
 	GhostcallDecodedCall,
+	GhostcallDecodedResult,
 	GhostcallEncodeOptions,
 	GhostcallProvider,
 	GhostcallResult,
