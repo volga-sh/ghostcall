@@ -43,6 +43,33 @@ await aggregateDecodedCalls(client, [
 `args` is required when the chosen function has inputs; zero-input functions
 may omit it or use `args: []`. No return-type annotations or casts are needed.
 
+Calls mapped from a list are checked the same way. The result is an array, such
+as `bigint[]`, rather than a tuple:
+
+```ts twoslash
+import { aggregateDecodedCalls, type Hex } from "@volga-sh/evm-ghostcall";
+import { erc20Abi } from "viem";
+
+const tokens: Hex[] = [
+    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+];
+const owner = "0x28C6c06298d514Db089934071355E5743bf21d60";
+
+const balances = await aggregateDecodedCalls(
+    client,
+    tokens.map((token) => ({
+        to: token,
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: [owner],
+    })),
+);
+```
+
+Map inside the call. If you store the mapped calls in a variable first, add
+`as const` to each returned object.
+
 Use literal JSON ABIs with `as const`, viem's `parseAbi`, or ox's `Abi.from` to
 retain type inference. A broadly typed ABI loaded at runtime produces `unknown`
 results and is validated during encoding.

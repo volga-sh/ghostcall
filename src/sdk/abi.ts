@@ -36,6 +36,29 @@ type GhostcallAbiCall<TAbi extends Abi = Abi> = {
 	? { functionName: string; args?: readonly unknown[] }
 	: FunctionCall<FunctionsOf<TAbi>[number]>);
 
+// TypeScript types an object returned from `.map` before it sees the object's
+// ABI, using only the batch constraint. It keeps a string literal only where that
+// constraint offers a literal-like type, so plain `string` would widen
+// `functionName` and address arguments until they match no ABI function. Every
+// string is capitalized or uncapitalized, so `LiteralString` accepts any string
+// while still counting as literal-like.
+type LiteralString = Capitalize<string> | Uncapitalize<string>;
+// `readonly []` keeps array literals as tuples; the index signature reaches
+// struct fields.
+type LiteralValue =
+	| LiteralString
+	| readonly []
+	| readonly LiteralValue[]
+	| { readonly [key: string]: LiteralValue };
+
+/** An ABI call in a batch, including one built by `.map` before its ABI is known. */
+type GhostcallAbiCallInput =
+	| GhostcallAbiCall
+	| (GhostcallAbiCall & {
+			functionName: LiteralString;
+			args?: readonly [] | readonly LiteralValue[];
+	  });
+
 type CallFunctionName<TCall extends GhostcallAbiCall> = TCall["functionName"] &
 	AbiItem.Name<FunctionsOf<TCall["abi"]>>;
 
@@ -144,5 +167,5 @@ function resolveAbiFunction(
 	return resolved;
 }
 
-export type { GhostcallAbiCall, GhostcallAbiResult };
+export type { GhostcallAbiCall, GhostcallAbiCallInput, GhostcallAbiResult };
 export { prepareDecodedCalls };
