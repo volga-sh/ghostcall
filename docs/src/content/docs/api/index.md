@@ -13,7 +13,8 @@ ghostcall exports four functions, one error class, their
 | Build request data for an `eth_call` sent by the application | [`encodeCalls()`](/api/encode-calls/) |
 | Parse the response to that `eth_call` | [`decodeResults()`](/api/decode-results/) |
 
-[`GhostcallSubcallError`](/api/subcall-error/) identifies which call failed.
+[`GhostcallSubcallError`](/api/subcall-error/) identifies which call failed or
+could not be decoded.
 
 Hover a name below to read its signature and description.
 

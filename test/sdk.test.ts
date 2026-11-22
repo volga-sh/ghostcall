@@ -165,10 +165,43 @@ test("failed calls throw before reaching decoders, even with a hidden allowFailu
 			assert.equal(error.index, 0);
 			assert.equal(error.call, original);
 			assert.equal(error.returnData, "0x2a");
+			assert.equal(error.message, "ghostcall subcall 0 failed");
+			assert.equal(error.cause, undefined);
 			return true;
 		},
 	);
 	assert.equal(decodeResult.mock.callCount(), 0);
+});
+
+test("decoder throws become GhostcallSubcallError with the call index and the thrown value as cause", async () => {
+	const provider = providerReturning("0x00032a0005babe");
+	// A decoder may throw any value, not only an Error.
+	for (const thrown of [new RangeError("unexpected length"), "not an Error"]) {
+		const throwing = {
+			...call,
+			decodeResult: (): never => {
+				throw thrown;
+			},
+		} satisfies GhostcallDecodedCall<never>;
+		await assert.rejects(
+			aggregateDecodedCalls(provider, [
+				{ ...call, decodeResult: (data: Hex) => data },
+				throwing,
+			]),
+			(error: unknown) => {
+				assert.ok(error instanceof GhostcallSubcallError);
+				assert.equal(
+					error.message,
+					"ghostcall subcall 1 result could not be decoded",
+				);
+				assert.equal(error.index, 1);
+				assert.equal(error.call, throwing);
+				assert.equal(error.returnData, "0xbabe");
+				assert.equal(error.cause, thrown);
+				return true;
+			},
+		);
+	}
 });
 
 test("rejects non-hex provider responses and mismatched result counts", async () => {

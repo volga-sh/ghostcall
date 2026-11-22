@@ -83,14 +83,28 @@ type GhostcallProvider = {
 	request(args: { method: string; params?: unknown }): Promise<unknown>;
 };
 
-/** A disallowed failure, with its zero-based index, executed call, and revert data. */
+/**
+ * A subcall that failed without allowFailure, or whose successful result its
+ * decoder rejected. Carries the zero-based index, executed call, and return data.
+ * Only decoding failures set `cause`, to the decoder's original error.
+ */
 class GhostcallSubcallError extends Error {
 	readonly index: number;
 	readonly call: GhostcallCall;
 	readonly returnData: Hex;
 
-	constructor(index: number, call: GhostcallCall, returnData: Hex) {
-		super(`ghostcall subcall ${index} failed`);
+	constructor(
+		index: number,
+		call: GhostcallCall,
+		returnData: Hex,
+		options?: { cause: unknown },
+	) {
+		super(
+			options === undefined
+				? `ghostcall subcall ${index} failed`
+				: `ghostcall subcall ${index} result could not be decoded`,
+			options,
+		);
 		this.name = "GhostcallSubcallError";
 		this.index = index;
 		this.call = call;
@@ -172,7 +186,8 @@ async function aggregateCalls(
 
 /**
  * Execute ABI-described calls or raw calls with custom decoders. Each tuple position
- * retains its result type. Any failed call throws; encoding/decoding errors pass through.
+ * retains its result type. A failed call, or a decoder that throws, throws
+ * GhostcallSubcallError; decoder errors become its `cause`. Encoding errors pass through.
  * ABI-decoded addresses are checksummed, including addresses nested in tuples or arrays.
  */
 async function aggregateDecodedCalls<
@@ -187,7 +202,12 @@ async function aggregateDecodedCalls<
 	return results.map(({ success, returnData }, index) => {
 		const call = preparedCalls[index] as GhostcallDecodedCall;
 		if (!success) throw new GhostcallSubcallError(index, call, returnData);
-		return call.decodeResult(returnData, index);
+		try {
+			return call.decodeResult(returnData, index);
+		} catch (cause) {
+			// Decoder errors such as ox's ZeroDataError do not say which call failed.
+			throw new GhostcallSubcallError(index, call, returnData, { cause });
+		}
 	}) as GhostcallDecodedResults<TCalls>;
 }
 
