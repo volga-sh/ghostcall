@@ -1,22 +1,19 @@
 ---
-// biome-ignore lint/correctness/noUnusedVariables: Referenced by the Astro template.
-const hero = Astro.locals.starlightRoute.entry.data.hero;
+const { hero } = Astro.locals.starlightRoute.entry.data;
 ---
 
-{
-	hero && (
-		<section class="manual-abstract" aria-labelledby="_top">
-			<div class="manual-abstract-label" aria-hidden="true">
-				<span>§00</span>
-				<span>Abstract</span>
-			</div>
-			<div class="manual-abstract-body">
-				<h1 id="_top">{hero.title}</h1>
-				{hero.tagline && <p>{hero.tagline}</p>}
-			</div>
-		</section>
-	)
-}
+{hero && (
+	<section aria-labelledby="_top" class="manual-abstract">
+		<div aria-hidden="true" class="manual-abstract-label">
+			<span>§00</span>
+			<span>Abstract</span>
+		</div>
+		<div class="manual-abstract-body">
+			<h1 id="_top">{hero.title}</h1>
+			{hero.tagline && <p>{hero.tagline}</p>}
+		</div>
+	</section>
+)}
 
 <style>
 	.manual-abstract {
@@ -32,12 +29,12 @@ const hero = Astro.locals.starlightRoute.entry.data.hero;
 		gap: 0.3rem;
 		/* Sits the label's cap-line on the first cap-line of the title. */
 		padding-top: 0.15rem;
-		color: var(--gc-muted);
 		font-family: var(--gc-font-mono);
 		font-size: 0.68rem;
 		font-weight: 600;
-		letter-spacing: 0.09em;
+		color: var(--gc-muted);
 		text-transform: uppercase;
+		letter-spacing: 0.09em;
 	}
 
 	.manual-abstract-body {
@@ -46,21 +43,23 @@ const hero = Astro.locals.starlightRoute.entry.data.hero;
 
 	h1 {
 		margin: 0;
-		color: var(--gc-ink);
 		font-family: var(--gc-font-serif);
 		font-size: 3.5rem;
 		font-weight: 600;
-		letter-spacing: -0.03em;
 		line-height: 1.02;
-		text-wrap: balance;
+		color: var(--gc-ink);
+		letter-spacing: -0.03em;
+		@supports (text-wrap: balance) {
+			text-wrap: balance;
+		}
 	}
 
 	p {
 		margin: 1.15rem 0 0;
-		color: var(--gc-ink);
 		font-family: var(--gc-font-serif);
 		font-size: 1.15rem;
 		line-height: 1.55;
+		color: var(--gc-ink);
 	}
 
 	@media screen and (max-width: 47.99rem) {

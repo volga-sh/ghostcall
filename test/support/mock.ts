@@ -1,35 +1,36 @@
 import { readFile } from "node:fs/promises";
 import type { TestContext } from "node:test";
-import { type Abi, AbiFunction } from "ox";
+import type { Abi } from "ox";
+import { AbiFunction } from "ox";
 import type { Hex } from "../../src/sdk/index.ts";
+import type { Transport } from "./anvil.ts";
 import {
 	deployContract,
 	sendTransaction,
 	startAnvil,
 	stopAnvil,
-	type Transport,
 } from "./anvil.ts";
 
 /** Start an isolated chain and deploy the real mock contract; writes wait for receipts. */
 async function setupMock(
 	t: TestContext,
-	codeSizeLimit?: number,
+	codeSizeLimit?: number
 ): Promise<{
 	transport: Transport;
 	to: Hex;
-	write(name: string, args?: readonly unknown[]): Promise<void>;
+	write: (name: string, args?: readonly unknown[]) => Promise<void>;
 }> {
 	const { child, transport } = await startAnvil(
 		codeSizeLimit === undefined
 			? []
-			: ["--code-size-limit", String(codeSizeLimit)],
+			: ["--code-size-limit", String(codeSizeLimit)]
 	);
 	t.after(() => stopAnvil(child));
 	const { abi, bytecode } = JSON.parse(
 		await readFile(
 			new URL("../../out/MockContract.sol/MockContract.json", import.meta.url),
-			"utf8",
-		),
+			"utf8"
+		)
 	) as { abi: Abi.Abi; bytecode: { object: Hex } };
 	const to = await deployContract(transport, bytecode.object);
 	return {

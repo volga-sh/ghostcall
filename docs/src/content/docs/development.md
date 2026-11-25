@@ -25,6 +25,10 @@ npm run check
 `build:sdk` compiles the Yul program, regenerates the bundled SDK initcode, and
 type-checks the SDK build.
 
+`npm run check` runs [Ultracite](https://www.ultracite.ai/) with the Biome
+core and Astro presets, just as CI does. Run `npm run check:fix` to apply
+automatic fixes, or `npm run format` for formatting only.
+
 ## Work on the Yul program
 
 ```sh

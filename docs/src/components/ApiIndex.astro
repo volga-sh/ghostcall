@@ -1,5 +1,4 @@
 ---
-// biome-ignore lint/correctness/noUnusedVariables: Referenced by the Astro template.
 const entries = [
 	{
 		name: "aggregateDecodedCalls()",
@@ -24,23 +23,21 @@ const entries = [
 ];
 ---
 
-<nav class="api-index not-content" aria-label="ghostcall functions">
-	<div class="api-index-header" aria-hidden="true">
+<nav aria-label="ghostcall functions" class="api-index not-content">
+	<div aria-hidden="true" class="api-index-header">
 		<span>Function</span>
 		<span>Result</span>
 	</div>
 	<ul>
-		{
-			entries.map((entry) => (
-				<li>
-					<a class="api-index-row" href={entry.href}>
-						<code>{entry.name}</code>
-						<span>{entry.description}</span>
-						<i aria-hidden="true">→</i>
-					</a>
-				</li>
-			))
-		}
+		{entries.map((entry) => (
+			<li>
+				<a class="api-index-row" href={entry.href}>
+					<code>{entry.name}</code>
+					<span>{entry.description}</span>
+					<i aria-hidden="true">→</i>
+				</a>
+			</li>
+		))}
 	</ul>
 </nav>
 
@@ -51,8 +48,8 @@ const entries = [
 	}
 
 	.api-index ul {
-		margin: 0;
 		padding: 0;
+		margin: 0;
 		list-style: none;
 	}
 
@@ -70,21 +67,21 @@ const entries = [
 
 	.api-index-header {
 		padding: 0.7rem 1rem;
-		background: var(--gc-code-chrome);
-		color: var(--gc-muted);
 		font-family: var(--gc-font-mono);
 		font-size: 0.64rem;
 		font-weight: 600;
-		letter-spacing: 0.09em;
+		color: var(--gc-muted);
 		text-transform: uppercase;
+		letter-spacing: 0.09em;
+		background: var(--gc-code-chrome);
 	}
 
 	.api-index-row {
 		position: relative;
-		border-bottom: 1px solid var(--gc-rule);
 		padding: 1.05rem 1rem;
 		color: var(--gc-muted);
 		text-decoration: none;
+		border-bottom: 1px solid var(--gc-rule);
 		transition:
 			background-color 120ms ease,
 			color 120ms ease;
@@ -99,19 +96,19 @@ const entries = [
 		inset-block: 0;
 		inset-inline-start: 0;
 		width: 3px;
-		background: transparent;
 		content: "";
+		background: transparent;
 	}
 
 	.api-index-row code {
-		margin-block: -0.125rem;
-		border: 0;
 		padding: 0.125rem 0.375rem;
-		background: transparent;
-		color: var(--gc-ink);
+		margin-block: -0.125rem;
 		font-family: var(--gc-font-mono);
 		font-size: 0.86rem;
 		font-weight: 600;
+		color: var(--gc-ink);
+		background: transparent;
+		border: 0;
 	}
 
 	.api-index-row > span {
@@ -121,10 +118,10 @@ const entries = [
 	}
 
 	.api-index-row i {
-		color: var(--gc-muted);
 		font-family: var(--gc-font-mono);
 		font-size: 0.8rem;
 		font-style: normal;
+		color: var(--gc-muted);
 	}
 
 	.api-index-row:is(:hover, :focus-visible) {

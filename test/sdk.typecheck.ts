@@ -1,11 +1,11 @@
 import { Abi } from "ox";
-import {
-	aggregateDecodedCalls,
-	type GhostcallAbiCall,
-	type GhostcallDecodedCall,
-	type GhostcallProvider,
-	type Hex,
+import type {
+	GhostcallAbiCall,
+	GhostcallDecodedCall,
+	GhostcallProvider,
+	Hex,
 } from "../src/sdk/index.ts";
+import { aggregateDecodedCalls } from "../src/sdk/index.ts";
 
 const abi = Abi.from([
 	"function totalSupply() view returns (uint256)",
@@ -28,7 +28,7 @@ type Equal<A, B> =
 		: false;
 
 /** Fails to compile unless its type argument is `true`. */
-function assertType<_T extends true>(): void {}
+declare function assertType<_T extends true>(): void;
 
 async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 	const results = await aggregateDecodedCalls(provider, [
@@ -171,7 +171,7 @@ async function checkDecodedTypes(provider: GhostcallProvider): Promise<void> {
 
 async function checkSharedNames(provider: GhostcallProvider): Promise<void> {
 	// An event or error that shares a function's name is not an overload of it.
-	const abi = Abi.from([
+	const sharedAbi = Abi.from([
 		"event supply(uint256 amount)",
 		"function supply() view returns (uint256)",
 		"function lookup() view returns (uint8)",
@@ -179,19 +179,19 @@ async function checkSharedNames(provider: GhostcallProvider): Promise<void> {
 		"error lookup(bool flag)",
 	]);
 	const results = await aggregateDecodedCalls(provider, [
-		{ to, abi, functionName: "supply" },
-		{ to, abi, functionName: "lookup" },
-		{ to, abi, functionName: "lookup", args: [to] },
+		{ to, abi: sharedAbi, functionName: "supply" },
+		{ to, abi: sharedAbi, functionName: "lookup" },
+		{ to, abi: sharedAbi, functionName: "lookup", args: [to] },
 	]);
 	assertType<Equal<typeof results, [bigint, number, string]>>();
 }
 
 async function checkDynamicAbi(
 	provider: GhostcallProvider,
-	abi: Abi.Abi,
+	dynamicAbi: Abi.Abi
 ): Promise<void> {
 	const results = await aggregateDecodedCalls(provider, [
-		{ to, abi, functionName: "loadedAtRuntime", args: [1n] },
+		{ to, abi: dynamicAbi, functionName: "loadedAtRuntime", args: [1n] },
 	]);
 	assertType<Equal<typeof results, [unknown]>>();
 }

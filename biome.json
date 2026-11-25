@@ -1,13 +1,42 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
+	"extends": ["ultracite/biome/core", "ultracite/biome/astro"],
 	"vcs": {
 		"enabled": true,
 		"clientKind": "git",
 		"useIgnoreFile": true
 	},
-	"files": {
-		"includes": ["**", "!**/package-lock.json"]
+	"formatter": {
+		"indentStyle": "tab"
 	},
+	"json": {
+		"formatter": { "indentStyle": "tab" }
+	},
+	"linter": {
+		"rules": {
+			"style": {
+				"useConsistentTypeDefinitions": {
+					"level": "error",
+					"options": { "style": "type" }
+				}
+			}
+		}
+	},
+	"overrides": [
+		{
+			"includes": ["docs/src/components/*.astro"],
+			"linter": {
+				"rules": {
+					"style": {
+						"useFilenamingConvention": {
+							"level": "error",
+							"options": { "filenameCases": ["PascalCase"] }
+						}
+					}
+				}
+			}
+		}
+	],
 	"markdown": {
 		"formatter": {
 			"enabled": false

@@ -4,14 +4,15 @@ import { parseArgs } from "node:util";
 import { RpcTransport } from "ox";
 import { validate as isAddress } from "ox/Address";
 import { size as hexSize } from "ox/Hex";
-
+import type {
+	GhostcallCall,
+	GhostcallProvider,
+	Hex,
+} from "../src/sdk/index.ts";
 import {
 	decodeResults,
 	encodeCalls,
-	type GhostcallCall,
-	type GhostcallProvider,
 	ghostcallInitcode,
-	type Hex,
 } from "../src/sdk/index.ts";
 
 /**
@@ -62,7 +63,8 @@ const balanceInputBytesPerCall = 2 + 20 + 4 + 32;
 const balanceReturnedBytesPerCall = 2 + 32;
 // PUSH1 0 PUSH1 0 RETURN: initcode that returns empty runtime code.
 const emptyRuntimeInitcode = "60006000f3";
-const format = new Intl.NumberFormat("en-US").format;
+const { format } = new Intl.NumberFormat("en-US");
+const decimalBlockNumber = /^\d+$/u;
 
 const usage = `Usage:
   npm run benchmark:limits -- --rpc-url <url> --mode raw
@@ -85,7 +87,7 @@ Options:
 /** Parse CLI flags and environment fallbacks, validating addresses before any RPC. */
 function parseBenchmarkArgs(
 	argv: readonly string[],
-	env: Record<string, string | undefined> = process.env,
+	env: Record<string, string | undefined> = process.env
 ): BenchmarkConfig {
 	const { values } = parseArgs({
 		args: [...argv],
@@ -111,7 +113,7 @@ function parseBenchmarkArgs(
 	const rpcUrl = values["rpc-url"] ?? env.GHOSTCALL_BENCH_RPC_URL;
 	if (!rpcUrl) {
 		throw new Error(
-			"Missing RPC URL. Pass --rpc-url or set GHOSTCALL_BENCH_RPC_URL.",
+			"Missing RPC URL. Pass --rpc-url or set GHOSTCALL_BENCH_RPC_URL."
 		);
 	}
 	const { mode } = values;
@@ -120,7 +122,9 @@ function parseBenchmarkArgs(
 	}
 
 	const addresses = (name: "token" | "owner", envName: string): Hex[] => {
-		if (mode === "raw") return [];
+		if (mode === "raw") {
+			return [];
+		}
 		const list = (values[name] ?? [env[envName] ?? ""])
 			.flatMap((value) => value.split(","))
 			.map((word) => word.trim())
@@ -129,7 +133,7 @@ function parseBenchmarkArgs(
 			throw new Error(`Balance mode requires at least one --${name} address.`);
 		}
 		return list.map((address, index) =>
-			assertAddress(address, `--${name}[${index}]`),
+			assertAddress(address, `--${name}[${index}]`)
 		);
 	};
 	const integer = (
@@ -138,13 +142,13 @@ function parseBenchmarkArgs(
 			| "timeout-ms"
 			| "max-calls"
 			| "max-initcode-bytes"
-			| "max-runtime-bytes",
+			| "max-runtime-bytes"
 	): number => {
 		const raw = values[name] ?? "";
 		const value = Number(raw);
 		if (raw.trim() === "" || !Number.isSafeInteger(value) || value < 0) {
 			throw new Error(
-				`--${name} must be a non-negative safe integer, got "${raw}"`,
+				`--${name} must be a non-negative safe integer, got "${raw}"`
 			);
 		}
 		return value;
@@ -155,7 +159,7 @@ function parseBenchmarkArgs(
 		mode,
 		tokens: addresses("token", "GHOSTCALL_BENCH_TOKENS"),
 		owners: addresses("owner", "GHOSTCALL_BENCH_OWNERS"),
-		blockTag: /^\d+$/.test(values.block)
+		blockTag: decimalBlockNumber.test(values.block)
 			? `0x${BigInt(values.block).toString(16)}`
 			: values.block,
 		from: assertAddress(values.from, "--from"),
@@ -177,7 +181,7 @@ function parseBenchmarkArgs(
 function buildBalanceCalls(
 	count: number,
 	tokens: readonly Hex[],
-	owners: readonly Hex[],
+	owners: readonly Hex[]
 ): GhostcallCall[] {
 	return Array.from({ length: count }, (_, index) => {
 		const owner = owners[
@@ -215,7 +219,7 @@ function createRawRuntimeReturnProbe(sizeBytes: number): Hex {
 async function findLimit(
 	min: number,
 	max: number,
-	probe: (candidate: number) => Promise<string | null>,
+	probe: (candidate: number) => Promise<string | null>
 ): Promise<LimitResult> {
 	const result: LimitResult = {
 		maxPass: min - 1,
@@ -232,21 +236,29 @@ async function findLimit(
 	const passes = async (candidate: number): Promise<boolean> => {
 		result.attempts += 1;
 		const failure = await probe(candidate);
-		if (failure === null) result.maxPass = candidate;
-		else Object.assign(result, { firstFail: candidate, failure });
+		if (failure === null) {
+			result.maxPass = candidate;
+		} else {
+			Object.assign(result, { firstFail: candidate, failure });
+		}
 		return failure === null;
 	};
 
-	let candidate = min;
-	while ((await passes(candidate)) && candidate < max) {
-		candidate = Math.min(candidate * 2, max);
+	let upperBound = min;
+	// biome-ignore lint/performance/noAwaitInLoops: Stop doubling at the first failed probe.
+	while ((await passes(upperBound)) && upperBound < max) {
+		upperBound = Math.min(upperBound * 2, max);
 	}
 	let low = result.maxPass + 1;
 	let high = (result.firstFail ?? max + 1) - 1;
 	while (low <= high) {
 		const middle = Math.floor((low + high) / 2);
-		if (await passes(middle)) low = middle + 1;
-		else high = middle - 1;
+		// biome-ignore lint/performance/noAwaitInLoops: Each probe determines which half to search next.
+		if (await passes(middle)) {
+			low = middle + 1;
+		} else {
+			high = middle - 1;
+		}
 	}
 	result.exhaustedConfiguredMax = result.firstFail === null;
 	return result;
@@ -262,7 +274,7 @@ async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
 	});
 	const rpc = async (
 		method: string,
-		params: readonly unknown[],
+		params: readonly unknown[]
 	): Promise<Hex> => {
 		const result = await provider.request({ method, params });
 		if (typeof result !== "string") {
@@ -277,7 +289,7 @@ async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
 	// RPC errors are probe failures; `check` decides whether the result passes.
 	const probe = async (
 		data: Hex,
-		check: (result: Hex) => string | null,
+		check: (result: Hex) => string | null
 	): Promise<string | null> => {
 		let result: Hex;
 		try {
@@ -301,8 +313,8 @@ async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
 					probe(createRawInitcodeSizeProbe(size), (result) =>
 						result === "0x"
 							? null
-							: `expected 0x, received ${hexSize(result)} bytes`,
-					),
+							: `expected 0x, received ${hexSize(result)} bytes`
+					)
 			)
 		: null;
 	const rawRuntime = runsRaw
@@ -310,13 +322,13 @@ async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
 				probe(createRawRuntimeReturnProbe(size), (result) =>
 					hexSize(result) === size
 						? null
-						: `expected ${size} returned bytes, received ${hexSize(result)}`,
-				),
+						: `expected ${size} returned bytes, received ${hexSize(result)}`
+				)
 			)
 		: null;
 	const balanceCallsByInitcode = Math.floor(
 		(config.maxInitcodeBytes - ghostcallInitcodeBytes) /
-			balanceInputBytesPerCall,
+			balanceInputBytesPerCall
 	);
 	const balances =
 		config.mode === "raw"
@@ -328,10 +340,10 @@ async function runBenchmark(config: BenchmarkConfig): Promise<BenchmarkReport> {
 						probe(
 							encodeCalls(
 								buildBalanceCalls(count, config.tokens, config.owners),
-								{ maxInitcodeBytes: config.maxInitcodeBytes },
+								{ maxInitcodeBytes: config.maxInitcodeBytes }
 							),
-							(result) => balanceFailure(result, count),
-						),
+							(result) => balanceFailure(result, count)
+						)
 				);
 
 	return {
@@ -356,15 +368,16 @@ function balanceFailure(result: Hex, count: number): string | null {
 	const entries = decodeResults(result);
 	if (entries.length !== count) {
 		throw new Error(
-			`expected ${count} result entries, received ${entries.length}`,
+			`expected ${count} result entries, received ${entries.length}`
 		);
 	}
 	for (const [index, { success, returnData }] of entries.entries()) {
-		if (!success)
+		if (!success) {
 			return `balanceOf call ${index} returned a failed result entry`;
+		}
 		if (hexSize(returnData) !== 32) {
 			throw new Error(
-				`balanceOf call ${index} returned ${hexSize(returnData)} bytes`,
+				`balanceOf call ${index} returned ${hexSize(returnData)} bytes`
 			);
 		}
 	}
@@ -388,7 +401,9 @@ function formatBenchmarkReport(report: BenchmarkReport): string {
 		["ERC-20 balanceOf ghostcall batch", report.balances, "calls"],
 	] as const;
 	for (const [title, result, unit] of sections) {
-		if (result === null) continue;
+		if (result === null) {
+			continue;
+		}
 		lines.push(
 			"",
 			title,
@@ -396,14 +411,14 @@ function formatBenchmarkReport(report: BenchmarkReport): string {
 				? `max pass: >= ${format(result.maxPass)} ${unit}`
 				: `max pass: ${format(result.maxPass)} ${unit}; first fail ${format(result.firstFail ?? 0)} ${unit}`,
 			`attempts: ${format(result.attempts)}`,
-			`first failure: ${result.failure ?? "none before configured max"}`,
+			`first failure: ${result.failure ?? "none before configured max"}`
 		);
 	}
 	if (report.balances !== null) {
 		lines.push(
 			`full CREATE data: ${format(report.balances.fullCreateDataBytes)} bytes`,
 			`returned bytes: ${format(report.balances.returnedBytes)} bytes`,
-			`per call input/return: ${balanceInputBytesPerCall}/${balanceReturnedBytesPerCall} bytes`,
+			`per call input/return: ${balanceInputBytesPerCall}/${balanceReturnedBytesPerCall} bytes`
 		);
 	}
 	return lines.join("\n");
@@ -427,7 +442,7 @@ async function main(): Promise<void> {
 	console.log(
 		config.json
 			? JSON.stringify(report, null, 2)
-			: formatBenchmarkReport(report),
+			: formatBenchmarkReport(report)
 	);
 }
 

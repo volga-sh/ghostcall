@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 
 const artifactUrl = new URL(
 	"../out/Ghostcall.yul/Ghostcall.json",
-	import.meta.url,
+	import.meta.url
 );
 const outputUrl = new URL("../src/sdk/generated/initcode.ts", import.meta.url);
 
@@ -11,7 +11,10 @@ const artifact = JSON.parse(await readFile(artifactUrl, "utf8")) as {
 };
 const bytecode = artifact.bytecode?.object;
 
-if (typeof bytecode !== "string" || !/^0x(?:[0-9a-fA-F]{2})+$/.test(bytecode)) {
+if (
+	typeof bytecode !== "string" ||
+	!/^0x(?:[0-9a-fA-F]{2})+$/u.test(bytecode)
+) {
 	throw new TypeError(`Missing or invalid bytecode in ${artifactUrl.pathname}`);
 }
 
@@ -22,5 +25,5 @@ await writeFile(
 
 export const ghostcallInitcode =
 \t${JSON.stringify(bytecode)} as const;
-`,
+`
 );
