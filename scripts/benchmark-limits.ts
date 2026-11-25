@@ -245,7 +245,6 @@ async function findLimit(
 	};
 
 	let upperBound = min;
-	// biome-ignore lint/performance/noAwaitInLoops: Stop doubling at the first failed probe.
 	while ((await passes(upperBound)) && upperBound < max) {
 		upperBound = Math.min(upperBound * 2, max);
 	}
@@ -253,7 +252,6 @@ async function findLimit(
 	let high = (result.firstFail ?? max + 1) - 1;
 	while (low <= high) {
 		const middle = Math.floor((low + high) / 2);
-		// biome-ignore lint/performance/noAwaitInLoops: Each probe determines which half to search next.
 		if (await passes(middle)) {
 			low = middle + 1;
 		} else {

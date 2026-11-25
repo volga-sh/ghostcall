@@ -242,13 +242,11 @@ function decodeValidatedResults(data: Hex): GhostcallResult[] {
 	while (cursor < data.length) {
 		const start = cursor + resultHeaderHexChars;
 		const header = Number.parseInt(data.slice(cursor, start), 16);
-		// biome-ignore lint/suspicious/noBitwiseOperators: The upper 15 bits encode the return-data length.
 		cursor = start + (header >> returnDataLengthShift) * 2;
 		// A partial header also ends past the data, so one check covers both cases.
 		if (cursor > data.length) {
 			throw new TypeError("Truncated ghostcall response");
 		}
-		// biome-ignore lint/suspicious/noBitwiseOperators: The low bit of the packed header is the success flag.
 		const success = (header & successFlag) !== 0;
 		results.push({ success, returnData: `0x${data.slice(start, cursor)}` });
 	}

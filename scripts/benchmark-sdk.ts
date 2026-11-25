@@ -1,4 +1,3 @@
-// biome-ignore-all lint/performance/noAwaitInLoops: Concurrent cases or iterations would measure contention rather than single-batch latency.
 import { Session } from "node:inspector/promises";
 import { resolve } from "node:path";
 import { performance } from "node:perf_hooks";
