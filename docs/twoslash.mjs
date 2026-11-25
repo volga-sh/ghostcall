@@ -43,7 +43,7 @@ export const twoslash = {
 			// Popups ship in the static HTML; keep their types and JSDoc out of search.
 			for (const node of selectAll(
 				".twoslash-popup-container, .twoslash-static-container, .twoslash-completion-container",
-				renderData.blockAst,
+				renderData.blockAst
 			)) {
 				node.properties.dataPagefindIgnore = "";
 			}

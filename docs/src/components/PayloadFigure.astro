@@ -1,9 +1,9 @@
 <div class="payload-figures not-content">
 	<figure>
 		<div
+			aria-label="Request layout: 60-byte ghostcall initcode followed by repeated calldata length, target address, and calldata fields."
 			class="byte-layout request-layout"
 			role="img"
-			aria-label="Request layout: 60-byte ghostcall initcode followed by repeated calldata length, target address, and calldata fields."
 		>
 			<span class="field field-program">60-byte program</span>
 			<span class="field field-length">len · 2</span>
@@ -16,9 +16,9 @@
 
 	<figure>
 		<div
+			aria-label="Response layout: repeated packed success and return-data length header followed by return data."
 			class="byte-layout response-layout"
 			role="img"
-			aria-label="Response layout: repeated packed success and return-data length header followed by return data."
 		>
 			<span class="field field-header">len + success · 2</span>
 			<span class="field field-return">return data · N</span>
@@ -37,10 +37,10 @@
 
 	figure {
 		min-width: 0;
-		margin: 0;
-		border: 1px solid var(--gc-ink);
 		padding: 1.25rem;
+		margin: 0;
 		background: var(--gc-surface);
+		border: 1px solid var(--gc-ink);
 	}
 
 	.byte-layout {
@@ -54,14 +54,14 @@
 		align-items: center;
 		justify-content: center;
 		min-width: 0;
-		border: 1px solid var(--gc-rule-strong);
 		padding: 0.8rem 0.65rem;
-		color: var(--gc-muted);
 		font-family: var(--gc-font-mono);
 		font-size: 0.68rem;
 		font-weight: 500;
 		line-height: 1.25;
+		color: var(--gc-muted);
 		text-align: center;
+		border: 1px solid var(--gc-rule-strong);
 	}
 
 	.field-program {
@@ -83,9 +83,9 @@
 
 	figcaption {
 		margin-top: 0.85rem;
-		color: var(--gc-muted);
 		font-family: var(--gc-font-serif);
 		font-size: 0.95rem;
+		color: var(--gc-muted);
 	}
 
 	figcaption i {

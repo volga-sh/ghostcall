@@ -2,45 +2,41 @@
 	"name": "@volga-sh/evm-ghostcall",
 	"version": "0.0.7",
 	"description": "Batch EVM contract reads without deploying a Multicall contract.",
-	"license": "MIT",
-	"type": "module",
-	"packageManager": "npm@12.2.3",
+	"homepage": "https://ghostcall.volga.sh",
+	"bugs": {
+		"url": "https://github.com/volga-sh/ghostcall/issues"
+	},
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/volga-sh/ghostcall.git"
 	},
-	"bugs": {
-		"url": "https://github.com/volga-sh/ghostcall/issues"
-	},
-	"homepage": "https://ghostcall.volga.sh",
-	"main": "./dist/sdk/index.js",
-	"types": "./dist/sdk/index.d.ts",
+	"license": "MIT",
+	"sideEffects": false,
+	"type": "module",
 	"exports": {
 		".": {
 			"types": "./dist/sdk/index.d.ts",
 			"import": "./dist/sdk/index.js"
 		}
 	},
+	"main": "./dist/sdk/index.js",
+	"types": "./dist/sdk/index.d.ts",
 	"files": [
 		"dist/",
 		"src/Ghostcall.yul",
 		"src/sdk/"
 	],
-	"sideEffects": false,
-	"publishConfig": {
-		"access": "public"
-	},
 	"scripts": {
 		"benchmark:limits": "node scripts/benchmark-limits.ts",
 		"benchmark:sdk": "node --expose-gc scripts/benchmark-sdk.ts",
 		"build:contracts": "forge build && npm run generate:sdk:initcode",
 		"build:sdk": "npm run build:contracts && tsc --project tsconfig.build.json",
-		"check": "biome check .",
-		"check:fix": "biome check --write .",
+		"check": "ultracite check",
+		"check:fix": "ultracite fix",
+		"check:sdk:initcode": "git diff --exit-code -- src/sdk/generated/initcode.ts",
 		"docs:build": "npm run build --prefix docs --",
 		"docs:dev": "npm run dev --prefix docs --",
 		"docs:preview": "npm run preview --prefix docs --",
-		"check:sdk:initcode": "git diff --exit-code -- src/sdk/generated/initcode.ts",
 		"format": "biome format --write .",
 		"generate:sdk:initcode": "node scripts/generate-sdk-initcode.ts",
 		"prepack": "npm run build:sdk",
@@ -55,6 +51,11 @@
 		"@biomejs/biome": "2.6.8",
 		"@safe-global/mock-contract": "4.1.0",
 		"@types/node": "26.6.6",
-		"typescript": "7.0.2"
+		"typescript": "7.0.2",
+		"ultracite": "8.3.1"
+	},
+	"packageManager": "npm@12.2.3",
+	"publishConfig": {
+		"access": "public"
 	}
 }

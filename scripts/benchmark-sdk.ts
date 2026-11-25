@@ -25,10 +25,15 @@ const overloadedAbi = parseAbi([
 ]);
 let checksum = 0;
 
+function consume(value: number): void {
+	// biome-ignore lint/suspicious/noBitwiseOperators: XOR folds each result into a fixed-width checksum.
+	checksum ^= value;
+}
+
 async function measure(
 	name: string,
 	iterations: number,
-	run: (iterations: number) => void | Promise<void>,
+	run: (iterations: number) => void | Promise<void>
 ): Promise<void> {
 	await run(iterations);
 	const samples: number[] = [];
@@ -36,7 +41,7 @@ async function measure(
 		globalThis.gc?.();
 		const start = performance.now();
 		await run(iterations);
-		samples.push(((performance.now() - start) * 1_000) / iterations);
+		samples.push(((performance.now() - start) * 1000) / iterations);
 	}
 	samples.sort((a, b) => a - b);
 
@@ -47,7 +52,7 @@ async function measure(
 	let allocatedBytes = 0;
 	try {
 		await session.post("HeapProfiler.startSampling", {
-			samplingInterval: 4_096,
+			samplingInterval: 4096,
 			includeObjectsCollectedByMajorGC: true,
 			includeObjectsCollectedByMinorGC: true,
 		});
@@ -62,13 +67,13 @@ async function measure(
 		session.disconnect();
 	}
 	console.log(
-		`${name.padEnd(44)} ${samples[3]?.toFixed(2).padStart(10)} µs/batch ${(allocatedBytes / iterations / 1_024).toFixed(2).padStart(10)} KiB allocated/batch`,
+		`${name.padEnd(44)} ${samples[3]?.toFixed(2).padStart(10)} µs/batch ${(allocatedBytes / iterations / 1024).toFixed(2).padStart(10)} KiB allocated/batch`
 	);
 }
 
 console.log(`SDK benchmark (${process.version}; median of 7 runs)`);
 console.log(
-	"Allocation figures are sampling estimates, not peak or retained heap.",
+	"Allocation figures are sampling estimates, not peak or retained heap."
 );
 for (const count of [1, 100, 700]) {
 	const calls: GhostcallDecodedCall[] = Array.from({ length: count }, () => ({
@@ -78,23 +83,24 @@ for (const count of [1, 100, 700]) {
 	}));
 	const response: Hex = `0x${`0041${"ab".repeat(32)}`.repeat(count)}`;
 	const provider: GhostcallProvider = {
-		request: async ({ params }) => {
+		request: ({ params }) => {
 			const [{ data }] = params as [{ data: Hex }, string];
-			checksum ^= data.charCodeAt(data.length - 1);
-			return response;
+			consume(data.charCodeAt(data.length - 1));
+			return Promise.resolve(response);
 		},
 	};
-	const iterations = Math.ceil(100_000 / count);
-	await measure(`encodeCalls (${count})`, iterations, (iterations) => {
+	const batchIterations = Math.ceil(100_000 / count);
+	await measure(`encodeCalls (${count})`, batchIterations, (iterations) => {
 		for (let index = 0; index < iterations; index += 1) {
 			const data = sdk.encodeCalls(calls);
 			// Touch the final byte to include flattening deferred string concatenation.
-			checksum ^= data.charCodeAt(data.length - 1);
+			consume(data.charCodeAt(data.length - 1));
 		}
 	});
-	await measure(`decodeResults (${count})`, iterations, (iterations) => {
-		for (let index = 0; index < iterations; index += 1)
-			checksum ^= sdk.decodeResults(response).length;
+	await measure(`decodeResults (${count})`, batchIterations, (iterations) => {
+		for (let index = 0; index < iterations; index += 1) {
+			consume(sdk.decodeResults(response).length);
+		}
 	});
 	const batchCases: [string, () => Promise<unknown[]>][] = [
 		["aggregateCalls", () => sdk.aggregateCalls(provider, calls)],
@@ -126,9 +132,10 @@ for (const count of [1, 100, 700]) {
 		]);
 	}
 	for (const [name, runBatch] of batchCases) {
-		await measure(`${name} (${count})`, iterations, async (iterations) => {
-			for (let index = 0; index < iterations; index += 1)
-				checksum ^= (await runBatch()).length;
+		await measure(`${name} (${count})`, batchIterations, async (iterations) => {
+			for (let index = 0; index < iterations; index += 1) {
+				consume((await runBatch()).length);
+			}
 		});
 	}
 }

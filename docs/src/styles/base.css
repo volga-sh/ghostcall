@@ -73,7 +73,6 @@
 :root,
 :root[data-theme],
 ::backdrop {
-	color-scheme: light;
 	--gc-paper: #f3efe6;
 	--gc-surface: #fffdf8;
 	--gc-ink: #172033;
@@ -118,6 +117,7 @@
 	--sl-shadow-lg: none;
 	--sl-font: var(--gc-font-serif);
 	--sl-font-mono: var(--gc-font-mono);
+	color-scheme: light;
 }
 
 :root {
@@ -139,17 +139,20 @@
 }
 
 html {
+	@supports (scrollbar-gutter: stable) {
+		scrollbar-gutter: stable;
+	}
 	background: var(--gc-paper);
-	scrollbar-gutter: stable;
 }
 
 body {
 	font-size: 1.03rem;
 }
 
+/* biome-ignore lint/suspicious/useBaseline: Browsers without ::selection keep their native highlight. */
 ::selection {
-	background: var(--gc-accent-soft);
 	color: var(--gc-ink);
+	background: var(--gc-accent-soft);
 }
 
 :focus-visible {

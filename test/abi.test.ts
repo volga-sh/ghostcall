@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Abi, AbiFunction } from "ox";
 import { size as hexSize } from "ox/Hex";
+import type {
+	GhostcallAbiCall,
+	GhostcallProvider,
+	Hex,
+} from "../src/sdk/index.ts";
 import {
 	aggregateDecodedCalls,
 	encodeCalls,
-	type GhostcallAbiCall,
-	type GhostcallProvider,
 	GhostcallSubcallError,
-	type Hex,
 } from "../src/sdk/index.ts";
 
 const to = "0x1111111111111111111111111111111111111111";
@@ -45,8 +47,8 @@ test("resolves overloads per call and mixes ABI results with custom decoders in 
 			AbiFunction.encodeResult(getByOwner, to),
 			AbiFunction.encodeResult(getById, 8n),
 			AbiFunction.encodeResult(supply, 9n),
-			"0xff",
-		),
+			"0xff"
+		)
 	);
 	assert.deepEqual(
 		await aggregateDecodedCalls({ request }, [
@@ -56,7 +58,7 @@ test("resolves overloads per call and mixes ABI results with custom decoders in 
 			{ to, abi: overloadedAbi, functionName: "supply" },
 			{ to, data: "0xaabb", decodeResult: (data) => data },
 		]),
-		[7n, to, 8n, 9n, "0xff"],
+		[7n, to, 8n, 9n, "0xff"]
 	);
 	assert.deepEqual(request.mock.calls[0]?.arguments[0].params, [
 		{
@@ -83,20 +85,20 @@ test("resolves a function whose name an event or error shares, in any ABI order"
 	]);
 	const ping = AbiFunction.from("function ping() view returns (uint256)");
 	const get = AbiFunction.from(
-		"function get(uint256 id) view returns (uint256)",
+		"function get(uint256 id) view returns (uint256)"
 	);
 	const request = t.mock.fn<GhostcallProvider["request"]>(async () =>
 		successResponse(
 			AbiFunction.encodeResult(ping, 7n),
-			AbiFunction.encodeResult(get, 8n),
-		),
+			AbiFunction.encodeResult(get, 8n)
+		)
 	);
 	assert.deepEqual(
 		await aggregateDecodedCalls({ request }, [
 			{ to, abi: sharedNameAbi, functionName: "ping" },
 			{ to, abi: sharedNameAbi, functionName: "get", args: [1n] },
 		]),
-		[7n, 8n],
+		[7n, 8n]
 	);
 	assert.deepEqual(request.mock.calls[0]?.arguments[0].params, [
 		{
@@ -114,14 +116,14 @@ test("resolves a function name within its own ABI object", async () => {
 	const boolAbi = Abi.from(["function value() view returns (bool)"]);
 	const response = successResponse(
 		AbiFunction.encodeResult(AbiFunction.fromAbi(uintAbi, "value"), 1n),
-		AbiFunction.encodeResult(AbiFunction.fromAbi(boolAbi, "value"), true),
+		AbiFunction.encodeResult(AbiFunction.fromAbi(boolAbi, "value"), true)
 	);
 	assert.deepEqual(
 		await aggregateDecodedCalls({ request: async () => response }, [
 			{ to, abi: uintAbi, functionName: "value" },
 			{ to, abi: boolAbi, functionName: "value" },
 		]),
-		[1n, true],
+		[1n, true]
 	);
 });
 
@@ -131,17 +133,17 @@ test("a broadly typed ABI resolves a function by its selector", async (t) => {
 		"function get(uint256 id) view returns (uint256)",
 	]);
 	const get = AbiFunction.from(
-		"function get(uint256 id) view returns (uint256)",
+		"function get(uint256 id) view returns (uint256)"
 	);
 	const request = t.mock.fn<GhostcallProvider["request"]>(async () =>
-		successResponse(AbiFunction.encodeResult(get, 8n)),
+		successResponse(AbiFunction.encodeResult(get, 8n))
 	);
 	const functionName = AbiFunction.getSelector(get);
 	assert.deepEqual(
 		await aggregateDecodedCalls({ request }, [
 			{ to, abi: dynamicAbi, functionName, args: [1n] },
 		]),
-		[8n],
+		[8n]
 	);
 	assert.deepEqual(request.mock.calls[0]?.arguments[0].params, [
 		{ data: encodeCalls([{ to, data: AbiFunction.encodeData(get, [1n]) }]) },
@@ -159,18 +161,18 @@ test("checksums ABI-decoded addresses, including nested tuples and arrays", asyn
 	const response = successResponse(
 		AbiFunction.encodeResult(
 			AbiFunction.fromAbi(positionsAbi, "owner"),
-			lowercase,
+			lowercase
 		),
 		AbiFunction.encodeResult(AbiFunction.fromAbi(positionsAbi, "positions"), [
 			{ owner: lowercase, delegates: [lowercase] },
-		]),
+		])
 	);
 	assert.deepEqual(
 		await aggregateDecodedCalls({ request: async () => response }, [
 			{ to, abi: positionsAbi, functionName: "owner" },
 			{ to, abi: positionsAbi, functionName: "positions" },
 		]),
-		[owner, [{ owner, delegates: [owner] }]],
+		[owner, [{ owner, delegates: [owner] }]]
 	);
 });
 
@@ -185,12 +187,16 @@ test("invalid dynamic ABI calls fail before RPC", async (t) => {
 		// Not an address, and ox would encode it as lookup(uint256)(0x1234).
 		{ to, abi, functionName: "lookup", args: ["0x1234"] },
 	];
-	for (const call of calls)
-		await assert.rejects(aggregateDecodedCalls({ request }, [call]));
 	// Resolving a repeated function once must not skip per-call argument checks.
 	const balanceOf = { to, abi, functionName: "balanceOf", args: [to] } as const;
-	for (const call of calls)
-		await assert.rejects(aggregateDecodedCalls({ request }, [balanceOf, call]));
+	await Promise.all(
+		calls.map(async (call) => {
+			await assert.rejects(aggregateDecodedCalls({ request }, [call]));
+			await assert.rejects(
+				aggregateDecodedCalls({ request }, [balanceOf, call])
+			);
+		})
+	);
 	assert.equal(request.mock.callCount(), 0);
 });
 
@@ -204,6 +210,6 @@ test("ABI subcall failures expose the executed calldata and raw revert data", as
 			assert.equal(error.call.data, "0x18160ddd");
 			assert.equal(error.returnData, "0xdeadbeef");
 			return true;
-		},
+		}
 	);
 });

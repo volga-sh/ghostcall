@@ -1,6 +1,6 @@
 ---
 const route = Astro.locals.starlightRoute;
-const id = route.entry.id;
+const { id } = route.entry;
 
 const labels: Record<string, string> = {
 	"getting-started": "Guide",
@@ -8,7 +8,6 @@ const labels: Record<string, string> = {
 	limits: "Protocol",
 	development: "Contribute",
 };
-// biome-ignore lint/correctness/noUnusedVariables: Referenced by the Astro template.
 const label =
 	id === "api" || id.startsWith("api/")
 		? "API reference"
@@ -27,23 +26,23 @@ const label =
 
 	p {
 		margin: 0 0 0.9rem;
-		color: var(--gc-muted);
 		font-family: var(--gc-font-mono);
 		font-size: 0.72rem;
 		font-weight: 600;
-		letter-spacing: 0.09em;
+		color: var(--gc-muted);
 		text-transform: uppercase;
+		letter-spacing: 0.09em;
 	}
 
 	h1 {
 		max-width: 18ch;
 		margin: 0;
-		color: var(--gc-ink);
 		font-family: var(--gc-font-serif);
 		font-size: var(--sl-text-h1);
 		font-weight: 600;
-		letter-spacing: -0.035em;
 		line-height: 1;
+		color: var(--gc-ink);
+		letter-spacing: -0.035em;
 		overflow-wrap: anywhere;
 	}
 </style>

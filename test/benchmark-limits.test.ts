@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import test, { type TestContext } from "node:test";
+import type { TestContext } from "node:test";
+import test from "node:test";
 import { size as hexSize } from "ox/Hex";
+import type { BenchmarkConfig } from "../scripts/benchmark-limits.ts";
 import {
-	type BenchmarkConfig,
 	balanceInputBytesPerCall,
 	buildBalanceCalls,
 	createRawInitcodeSizeProbe,
@@ -11,7 +12,8 @@ import {
 	parseBenchmarkArgs,
 	runBenchmark,
 } from "../scripts/benchmark-limits.ts";
-import { ghostcallInitcode, type Hex } from "../src/sdk/index.ts";
+import type { Hex } from "../src/sdk/index.ts";
+import { ghostcallInitcode } from "../src/sdk/index.ts";
 
 const tokenA = "0x1111111111111111111111111111111111111111";
 const tokenB = "0x2222222222222222222222222222222222222222";
@@ -50,7 +52,7 @@ test("parses comma-separated and repeated addresses, numbers, and env fallbacks"
 				`--max-initcode-bytes=${config.maxInitcodeBytes}`,
 				"--max-runtime-bytes=0x1",
 			],
-			env,
+			env
 		),
 		{
 			...config,
@@ -58,7 +60,7 @@ test("parses comma-separated and repeated addresses, numbers, and env fallbacks"
 			owners: [ownerA, ownerB],
 			blockTag: "0x7b",
 			gas: "0xf4240",
-		},
+		}
 	);
 	const raw = parseBenchmarkArgs(["--mode=raw"], {
 		...env,
@@ -67,15 +69,17 @@ test("parses comma-separated and repeated addresses, numbers, and env fallbacks"
 	assert.deepEqual([raw.tokens, raw.owners], [[], []]);
 });
 
+const invalidArgs = [
+	[["--mode=balances"], /--token/u],
+	[["--mode=balances", `--token=${tokenA}`], /--owner/u],
+	[["--token=0x1234", `--owner=${ownerA}`], /--token\[0\]/u],
+	[["--mode=raw", "--from=0x1234"], /--from/u],
+	[["--mode=raw", "--gas=banana"], /--gas must be/u],
+	[["--mode=raw", "--max-calls=Infinity"], /--max-calls must be/u],
+] as const;
+
 test("rejects missing balance inputs, invalid addresses, and invalid numbers", () => {
-	for (const [args, error] of [
-		[["--mode=balances"], /--token/],
-		[["--mode=balances", `--token=${tokenA}`], /--owner/],
-		[["--token=0x1234", `--owner=${ownerA}`], /--token\[0\]/],
-		[["--mode=raw", "--from=0x1234"], /--from/],
-		[["--mode=raw", "--gas=banana"], /--gas must be/],
-		[["--mode=raw", "--max-calls=Infinity"], /--max-calls must be/],
-	] as const) {
+	for (const [args, error] of invalidArgs) {
 		assert.throws(() => parseBenchmarkArgs(args, env), error, args.join(" "));
 	}
 });
@@ -95,9 +99,9 @@ test("builds exact probe bytes and rotates tokens before owners", () => {
 
 test("finds the threshold without duplicate probes, or reports a lower bound", async () => {
 	const candidates: number[] = [];
-	const result = await findLimit(1, 20, async (candidate) => {
+	const result = await findLimit(1, 20, (candidate) => {
 		candidates.push(candidate);
-		return candidate <= 13 ? null : "too large";
+		return Promise.resolve(candidate <= 13 ? null : "too large");
 	});
 	assert.equal(result.maxPass, 13);
 	assert.equal(result.firstFail, 14);
@@ -136,32 +140,34 @@ test("reports failed balance subcalls as probe failures", async (t) => {
 	assert.equal(report.balances?.firstFail, 3);
 	assert.equal(
 		report.balances?.failure,
-		"balanceOf call 0 returned a failed result entry",
+		"balanceOf call 0 returned a failed result entry"
 	);
 	assert.deepEqual(counts, [1, 2, 4, 3]);
 });
 
 function mockBalanceRpc(
 	t: TestContext,
-	resultFor: (count: number) => Hex,
+	resultFor: (count: number) => Hex
 ): void {
-	const fetch: typeof globalThis.fetch = async (_input, init) => {
+	const fetch: typeof globalThis.fetch = (_input, init) => {
 		const { id, method, params } = JSON.parse(String(init?.body)) as {
 			id: number;
 			method: string;
 			params: [{ data: Hex }];
 		};
 		let result: Hex;
-		if (method === "eth_chainId") result = "0x1";
-		else if (method === "eth_blockNumber") result = "0x2";
-		else {
+		if (method === "eth_chainId") {
+			result = "0x1";
+		} else if (method === "eth_blockNumber") {
+			result = "0x2";
+		} else {
 			assert.equal(method, "eth_call");
 			const count =
 				(hexSize(params[0].data) - initcodeBytes) / balanceInputBytesPerCall;
 			assert.ok(Number.isInteger(count));
 			result = resultFor(count);
 		}
-		return Response.json({ jsonrpc: "2.0", id, result });
+		return Promise.resolve(Response.json({ jsonrpc: "2.0", id, result }));
 	};
 	t.mock.method(globalThis, "fetch", fetch);
 }

@@ -1,11 +1,7 @@
 import { validate as isAddress } from "ox/Address";
 import { size as hexSize, validate as isHex } from "ox/Hex";
-
-import {
-	type GhostcallAbiCall,
-	type GhostcallAbiResult,
-	prepareDecodedCalls,
-} from "./abi.ts";
+import type { GhostcallAbiCall, GhostcallAbiResult } from "./abi.ts";
+import { prepareDecodedCalls } from "./abi.ts";
 import { ghostcallInitcode } from "./generated/initcode.ts";
 
 /** A 0x-prefixed string, validated at SDK wire boundaries. */
@@ -80,6 +76,7 @@ type GhostcallAggregateOptions = GhostcallEncodeOptions & {
 
 /** A provider with an EIP-1193-style request method, such as a viem client or ox transport. */
 type GhostcallProvider = {
+	// biome-ignore lint/style/useConsistentMethodSignatures: Method variance accepts providers with narrower RPC schemas, including viem and ox.
 	request(args: { method: string; params?: unknown }): Promise<unknown>;
 };
 
@@ -101,13 +98,13 @@ class GhostcallSubcallError extends Error {
 // Request entries: [uint16 calldata length][20-byte target][calldata].
 const callHeaderSize = 22;
 const calldataLengthHexChars = 4;
-const maxCalldataSize = 0xffff;
+const maxCalldataSize = 0xff_ff;
 // Result entries: [uint15 returndata length | success bit][returndata].
 const resultHeaderHexChars = 4;
 const successFlag = 1;
 const returnDataLengthShift = 1;
 // EIP-3860 initcode limit.
-const defaultMaxInitcodeBytes = 0xc000;
+const defaultMaxInitcodeBytes = 0xc0_00;
 const bundledInitcodeSize = hexSize(ghostcallInitcode);
 
 /**
@@ -117,7 +114,7 @@ const bundledInitcodeSize = hexSize(ghostcallInitcode);
  */
 function encodeCalls(
 	calls: readonly GhostcallCall[],
-	{ maxInitcodeBytes = defaultMaxInitcodeBytes }: GhostcallEncodeOptions = {},
+	{ maxInitcodeBytes = defaultMaxInitcodeBytes }: GhostcallEncodeOptions = {}
 ): Hex {
 	if (calls.length === 0) {
 		throw new RangeError("calls must contain at least one call");
@@ -125,7 +122,9 @@ function encodeCalls(
 	let encodedData: Hex = ghostcallInitcode;
 	let totalEncodedSize = bundledInitcodeSize;
 	const sizeError = `encoded ghostcall initcode exceeds the ${maxInitcodeBytes}-byte CREATE initcode limit`;
-	if (totalEncodedSize > maxInitcodeBytes) throw new RangeError(sizeError);
+	if (totalEncodedSize > maxInitcodeBytes) {
+		throw new RangeError(sizeError);
+	}
 
 	// A plain loop keeps the string concatenation fast; see benchmark:sdk.
 	let index = 0;
@@ -135,11 +134,13 @@ function encodeCalls(
 		const calldataSize = hexSize(calldata);
 		if (calldataSize > maxCalldataSize) {
 			throw new RangeError(
-				`calls[${index}].data exceeds the ${maxCalldataSize}-byte calldata limit`,
+				`calls[${index}].data exceeds the ${maxCalldataSize}-byte calldata limit`
 			);
 		}
 		totalEncodedSize += callHeaderSize + calldataSize;
-		if (totalEncodedSize > maxInitcodeBytes) throw new RangeError(sizeError);
+		if (totalEncodedSize > maxInitcodeBytes) {
+			throw new RangeError(sizeError);
+		}
 		const header = calldataSize
 			.toString(16)
 			.padStart(calldataLengthHexChars, "0");
@@ -156,13 +157,13 @@ function encodeCalls(
 async function aggregateCalls(
 	provider: GhostcallProvider,
 	calls: readonly GhostcallCall[],
-	options?: GhostcallAggregateOptions,
+	options?: GhostcallAggregateOptions
 ): Promise<GhostcallResult[]> {
 	const results = await executeCalls(provider, calls, options);
 	let index = 0;
 	for (const { success, returnData } of results) {
 		const call = calls[index] as GhostcallCall;
-		if (!success && !call.allowFailure) {
+		if (!(success || call.allowFailure)) {
 			throw new GhostcallSubcallError(index, call, returnData);
 		}
 		index += 1;
@@ -180,13 +181,15 @@ async function aggregateDecodedCalls<
 >(
 	provider: GhostcallProvider,
 	calls: TCalls & NoInfer<ValidatedDecodedCalls<TCalls>>,
-	options?: GhostcallAggregateOptions,
+	options?: GhostcallAggregateOptions
 ): Promise<GhostcallDecodedResults<TCalls>> {
 	const preparedCalls = prepareDecodedCalls(calls);
 	const results = await executeCalls(provider, preparedCalls, options);
 	return results.map(({ success, returnData }, index) => {
 		const call = preparedCalls[index] as GhostcallDecodedCall;
-		if (!success) throw new GhostcallSubcallError(index, call, returnData);
+		if (!success) {
+			throw new GhostcallSubcallError(index, call, returnData);
+		}
 		return call.decodeResult(returnData, index);
 	}) as GhostcallDecodedResults<TCalls>;
 }
@@ -200,10 +203,12 @@ function decodeResults(data: Hex): GhostcallResult[] {
 async function executeCalls(
 	provider: GhostcallProvider,
 	calls: readonly GhostcallCall[],
-	options: GhostcallAggregateOptions = {},
+	options: GhostcallAggregateOptions = {}
 ): Promise<GhostcallResult[]> {
 	// The program needs at least one entry, so an empty batch skips the RPC.
-	if (calls.length === 0) return [];
+	if (calls.length === 0) {
+		return [];
+	}
 	const { from, gas, blockTag = "latest" } = options.ethCall ?? {};
 	const ethCall = {
 		data: encodeCalls(calls, options),
@@ -220,11 +225,11 @@ async function executeCalls(
 		],
 	});
 	const results = decodeValidatedResults(
-		assertHex(response, "eth_call result"),
+		assertHex(response, "eth_call result")
 	);
 	if (results.length !== calls.length) {
 		throw new Error(
-			`ghostcall returned ${results.length} result entries for ${calls.length} calls`,
+			`ghostcall returned ${results.length} result entries for ${calls.length} calls`
 		);
 	}
 	return results;
@@ -260,7 +265,7 @@ function assertHex(value: unknown, label: string): Hex {
 	// ox checks prefix/digits; the wire format additionally requires whole bytes.
 	if (!isHex(value, { strict: true }) || value.length % 2 !== 0) {
 		throw new TypeError(
-			`${label} must be an even-length 0x-prefixed hex string`,
+			`${label} must be an even-length 0x-prefixed hex string`
 		);
 	}
 	return value;
@@ -270,8 +275,9 @@ function toQuantity(value: bigint): Hex {
 	return `0x${value.toString(16)}`;
 }
 
+export type { GhostcallAbiCall } from "./abi.ts";
+export { ghostcallInitcode } from "./generated/initcode.ts";
 export type {
-	GhostcallAbiCall,
 	GhostcallAggregateOptions,
 	GhostcallCall,
 	GhostcallDecodedCall,
@@ -286,5 +292,4 @@ export {
 	decodeResults,
 	encodeCalls,
 	GhostcallSubcallError,
-	ghostcallInitcode,
 };

@@ -1,18 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { size as hexSize } from "ox/Hex";
+import type {
+	GhostcallCall,
+	GhostcallDecodedCall,
+	GhostcallProvider,
+	GhostcallResult,
+	Hex,
+} from "../src/sdk/index.ts";
 import {
 	aggregateCalls,
 	aggregateDecodedCalls,
 	decodeResults,
 	encodeCalls,
-	type GhostcallCall,
-	type GhostcallDecodedCall,
-	type GhostcallProvider,
-	type GhostcallResult,
 	GhostcallSubcallError,
 	ghostcallInitcode,
-	type Hex,
 } from "../src/sdk/index.ts";
 
 const call = {
@@ -38,28 +40,31 @@ test("encodes ordered uint16-length/address/calldata entries after the initcode"
 	} satisfies GhostcallCall;
 	assert.equal(
 		encodeCalls([first, second]),
-		`${base}0002${first.to.slice(2)}aAbB0000${second.to.slice(2)}`,
+		`${base}0002${first.to.slice(2)}aAbB0000${second.to.slice(2)}`
 	);
 });
 
 test("enforces calldata and full CREATE request ceilings at their boundaries", () => {
 	const baseSize = hexSize(ghostcallInitcode);
 	// Two entries reach the default 49,152-byte ceiling exactly.
-	const defaultFit = 0xc000 - baseSize - 2 * 22;
-	assert.equal(hexSize(encodeCalls([callWithSize(defaultFit), call])), 0xc000);
+	const defaultFit = 0xc0_00 - baseSize - 2 * 22;
+	assert.equal(hexSize(encodeCalls([callWithSize(defaultFit), call])), 0xc0_00);
 	assert.throws(
 		() => encodeCalls([callWithSize(defaultFit + 1), call]),
-		RangeError,
+		RangeError
 	);
 
-	const maxInitcodeBytes = baseSize + 22 + 0xffff;
+	const maxInitcodeBytes = baseSize + 22 + 0xff_ff;
 	assert.equal(
-		hexSize(encodeCalls([callWithSize(0xffff)], { maxInitcodeBytes })),
-		maxInitcodeBytes,
+		hexSize(encodeCalls([callWithSize(0xff_ff)], { maxInitcodeBytes })),
+		maxInitcodeBytes
 	);
 	assert.throws(
-		() => encodeCalls([callWithSize(0x10000)], { maxInitcodeBytes }),
-		/65535-byte calldata limit/,
+		() => encodeCalls([callWithSize(0x1_00_00)], { maxInitcodeBytes }),
+		{
+			name: "RangeError",
+			message: "calls[0].data exceeds the 65535-byte calldata limit",
+		}
 	);
 });
 
@@ -79,21 +84,33 @@ test("rejects addresses and calldata that the Hex type admits but the wire forma
 		{ ...call, data: "0xzz" },
 		{ ...call, data: "0x00\n" },
 	];
-	for (const input of invalid)
+	for (const input of invalid) {
 		assert.throws(() => encodeCalls([input]), TypeError);
+	}
 	await assert.rejects(
 		aggregateCalls(providerReturning("0x"), [call], {
 			ethCall: { from: "0x1234" },
 		}),
-		/options\.ethCall\.from must be a 20-byte hex string/,
+		{
+			name: "TypeError",
+			message: "options.ethCall.from must be a 20-byte hex string",
+		}
 	);
 });
+
+const malformedResponses = [
+	["0x00", /Truncated/u],
+	["0x0001ff", /Truncated/u],
+	["0x0005ff", /Truncated/u],
+	["0xabc", /even-length/u],
+	["0xzz", /even-length/u],
+] as const;
 
 test("decodes mixed-case headers across uint15 length boundaries and rejects malformed responses", () => {
 	assert.deepEqual(decodeResults("0x"), []);
 	const expected: GhostcallResult[] = [];
 	let response: Hex = "0x";
-	for (const length of [0, 1, 0xabc, 0x7fff]) {
+	for (const length of [0, 1, 0xa_bc, 0x7f_ff]) {
 		const returnData: Hex = `0x${"aB".repeat(length)}`;
 		for (const success of [false, true]) {
 			const header = (length * 2 + Number(success))
@@ -104,13 +121,7 @@ test("decodes mixed-case headers across uint15 length boundaries and rejects mal
 		}
 	}
 	assert.deepEqual(decodeResults(response), expected);
-	for (const [data, error] of [
-		["0x00", /Truncated/],
-		["0x0001ff", /Truncated/],
-		["0x0005ff", /Truncated/],
-		["0xabc", /even-length/],
-		["0xzz", /even-length/],
-	] as const) {
+	for (const [data, error] of malformedResponses) {
 		assert.throws(() => decodeResults(data), error);
 	}
 });
@@ -118,7 +129,7 @@ test("decodes mixed-case headers across uint15 length boundaries and rejects mal
 test("forwards CREATE-style eth_call options and returns allowed failures", async (t) => {
 	const calls = [call, { ...call, allowFailure: true }];
 	const request = t.mock.fn<GhostcallProvider["request"]>(
-		async () => "0x0003aa0002bb",
+		async () => "0x0003aa0002bb"
 	);
 	const results = await aggregateCalls({ request }, calls, {
 		ethCall: { from: call.to, gas: 21_000n, blockTag: 123n },
@@ -146,7 +157,7 @@ test("decodes custom results with their batch index", async (t) => {
 	] as const satisfies readonly GhostcallDecodedCall[];
 	assert.deepEqual(
 		await aggregateDecodedCalls(providerReturning("0x00032a0005babe"), calls),
-		[42, "0XBABE"],
+		[42, "0XBABE"]
 	);
 	assert.deepEqual(decode.mock.calls[0]?.arguments, ["0x2a", 0]);
 });
@@ -166,20 +177,24 @@ test("failed calls throw before reaching decoders, even with a hidden allowFailu
 			assert.equal(error.call, original);
 			assert.equal(error.returnData, "0x2a");
 			return true;
-		},
+		}
 	);
 	assert.equal(decodeResult.mock.callCount(), 0);
 });
 
 test("rejects non-hex provider responses and mismatched result counts", async () => {
-	await assert.rejects(
-		aggregateCalls(providerReturning(123), [call]),
-		/eth_call result must be/,
+	await assert.rejects(aggregateCalls(providerReturning(123), [call]), {
+		name: "TypeError",
+		message: "eth_call result must be an even-length 0x-prefixed hex string",
+	});
+	await Promise.all(
+		[
+			["0x", 0],
+			["0x00010001", 2],
+		].map(([response, count]) =>
+			assert.rejects(aggregateCalls(providerReturning(response), [call]), {
+				message: `ghostcall returned ${count} result entries for 1 calls`,
+			})
+		)
 	);
-	for (const response of ["0x", "0x00010001"]) {
-		await assert.rejects(
-			aggregateCalls(providerReturning(response), [call]),
-			/result entries for 1 calls/,
-		);
-	}
 });

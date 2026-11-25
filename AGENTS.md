@@ -26,8 +26,8 @@ Run all commands from the repository root.
 npm run build:contracts      # Build the Yul contract with Foundry and refresh generated SDK initcode
 npm run build:sdk            # Build contracts, refresh initcode, then compile the SDK to dist/
 npm run generate:sdk:initcode
-npm run check                # Lint and static checks with Biome
-npm run check:fix            # Auto-fix Biome issues where possible
+npm run check                # Lint and format checks with Ultracite (Biome)
+npm run check:fix            # Apply Ultracite's automatic fixes
 npm run format               # Format with Biome
 npm run typecheck            # TypeScript type checking
 npm run test                 # Rebuild contracts and run the full Node test suite

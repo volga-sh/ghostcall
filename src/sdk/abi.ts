@@ -82,18 +82,20 @@ type SharedFunctionsByAbi = Map<Abi, SharedFunctions>;
  * resolved function. Raw decoded calls pass through unchanged.
  */
 function prepareDecodedCalls(
-	calls: readonly (GhostcallAbiCall | GhostcallDecodedCall)[],
+	calls: readonly (GhostcallAbiCall | GhostcallDecodedCall)[]
 ): GhostcallDecodedCall[] {
 	const sharedFunctions: SharedFunctionsByAbi = new Map();
 	return calls.map((call): GhostcallDecodedCall => {
-		if (call.abi === undefined) return call;
+		if (call.abi === undefined) {
+			return call;
+		}
 		const args = call.args ?? [];
 		const abiFunction = resolveAbiFunction(call, args, sharedFunctions);
 		// ox encodes only the selector when args are missing, so reject that
 		// before RPC; literal ABIs catch it in types, runtime-loaded ABIs cannot.
 		if (args.length !== abiFunction.inputs.length) {
 			throw new TypeError(
-				`${call.functionName} expects ${abiFunction.inputs.length} arguments, received ${args.length}`,
+				`${call.functionName} expects ${abiFunction.inputs.length} arguments, received ${args.length}`
 			);
 		}
 		return {
@@ -111,7 +113,7 @@ function prepareDecodedCalls(
 function resolveAbiFunction(
 	call: GhostcallAbiCall,
 	args: readonly unknown[],
-	sharedFunctions: SharedFunctionsByAbi,
+	sharedFunctions: SharedFunctionsByAbi
 ): AbiFunction.AbiFunction {
 	let shared = sharedFunctions.get(call.abi);
 	if (shared === undefined) {
@@ -131,14 +133,16 @@ function resolveAbiFunction(
 				: null;
 		byName.set(call.functionName, abiFunction);
 	}
-	if (abiFunction) return abiFunction;
+	if (abiFunction) {
+		return abiFunction;
+	}
 	const resolved = AbiFunction.fromAbi(functions, call.functionName, { args });
 	// When no overload accepts the args, ox returns its first candidate with the
 	// others attached as `overloads`. Encoding it would call a function the args
 	// did not select; literal ABIs catch that in types, runtime-loaded ABIs cannot.
 	if (args.length > 0 && "overloads" in resolved) {
 		throw new TypeError(
-			`${call.functionName} has no overload that accepts the supplied arguments`,
+			`${call.functionName} has no overload that accepts the supplied arguments`
 		);
 	}
 	return resolved;

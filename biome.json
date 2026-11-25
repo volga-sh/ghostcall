@@ -1,13 +1,72 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
+	"extends": ["ultracite/biome/core", "ultracite/biome/astro"],
 	"vcs": {
 		"enabled": true,
 		"clientKind": "git",
 		"useIgnoreFile": true
 	},
-	"files": {
-		"includes": ["**", "!**/package-lock.json"]
+	"formatter": {
+		"indentStyle": "tab"
 	},
+	"json": {
+		"formatter": { "indentStyle": "tab" }
+	},
+	"linter": {
+		"rules": {
+			"style": {
+				"useConsistentTypeDefinitions": {
+					"level": "error",
+					"options": { "style": "type" }
+				}
+			}
+		}
+	},
+	"overrides": [
+		{
+			"includes": ["src/sdk/**/*.ts"],
+			"linter": {
+				"rules": {
+					"correctness": { "noNodejsModules": "error" },
+					"suspicious": { "noConsole": "error" }
+				}
+			}
+		},
+		{
+			"includes": ["src/sdk/index.ts"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noBitwiseOperators": {
+							"level": "error",
+							"options": { "allow": ["&", ">>"] }
+						}
+					}
+				}
+			}
+		},
+		{
+			"includes": ["scripts/benchmark-limits.ts", "scripts/benchmark-sdk.ts"],
+			"linter": {
+				"rules": {
+					"performance": { "noAwaitInLoops": "off" }
+				}
+			}
+		},
+		{
+			"includes": ["docs/src/components/*.astro"],
+			"linter": {
+				"rules": {
+					"style": {
+						"useFilenamingConvention": {
+							"level": "error",
+							"options": { "filenameCases": ["PascalCase"] }
+						}
+					}
+				}
+			}
+		}
+	],
 	"markdown": {
 		"formatter": {
 			"enabled": false

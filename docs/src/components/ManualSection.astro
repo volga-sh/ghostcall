@@ -1,17 +1,15 @@
 ---
-interface Props {
+type Props = {
+	id: string;
 	index: string;
 	title: string;
-	id: string;
-}
+};
 
-// biome-ignore lint/correctness/noUnusedVariables: Referenced by the Astro template.
 const { index, title, id } = Astro.props;
-// biome-ignore lint/correctness/noUnusedVariables: Referenced by the Astro template.
 const headingId = `${id}-title`;
 ---
 
-<section class="manual-section" id={id} aria-labelledby={headingId}>
+<section aria-labelledby={headingId} class="manual-section" id={id}>
 	<div class="manual-section-label not-content">
 		<h2 id={headingId}>
 			<span>§{index}</span>
@@ -31,8 +29,8 @@ const headingId = `${id}-title`;
 			minmax(0, 1fr);
 		gap: var(--gc-column-gap);
 		padding-block: 2.25rem;
-		border-top: 1px solid var(--gc-rule);
 		scroll-margin-top: calc(var(--sl-nav-height) + 1.5rem);
+		border-top: 1px solid var(--gc-rule);
 	}
 
 	.manual-section-label {
@@ -45,16 +43,16 @@ const headingId = `${id}-title`;
 		display: flex;
 		flex-direction: column;
 		gap: 0.3rem;
-		margin: 0;
 		padding: 0;
-		border: 0;
-		color: var(--gc-muted);
+		margin: 0;
 		font-family: var(--gc-font-mono);
 		font-size: 0.68rem;
 		font-weight: 600;
-		letter-spacing: 0.09em;
 		line-height: 1.45;
+		color: var(--gc-muted);
 		text-transform: uppercase;
+		letter-spacing: 0.09em;
+		border: 0;
 	}
 
 	.manual-section-body {
@@ -78,20 +76,21 @@ const headingId = `${id}-title`;
 	}
 
 	.manual-section-body > :global(.manual-follow-link a) {
-		border-bottom: 1px solid var(--gc-ink);
 		padding-bottom: 0.2rem;
-		color: var(--gc-ink);
 		font-family: var(--gc-font-mono);
 		font-size: 0.74rem;
 		font-weight: 600;
+		color: var(--gc-ink);
+		text-transform: uppercase;
 		letter-spacing: 0.04em;
 		text-decoration: none;
-		text-transform: uppercase;
+		border-bottom: 1px solid var(--gc-ink);
 	}
 
-	.manual-section-body > :global(.manual-follow-link a:is(:hover, :focus-visible)) {
-		border-color: var(--gc-accent);
+	.manual-section-body
+		> :global(.manual-follow-link a:is(:hover, :focus-visible)) {
 		color: var(--gc-accent);
+		border-color: var(--gc-accent);
 	}
 
 	@media screen and (max-width: 47.99rem) {
